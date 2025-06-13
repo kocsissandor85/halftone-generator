@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Color Halftone Plotter Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="container">
+    <h1>Advanced Color Halftone Plotter Tool</h1>
+    <p class="subtitle">Upload an image to convert it into color-separated halftone patterns for plotting</p>
+
+    <div class="upload-area" id="uploadArea">
+        <p>Click to upload or drag and drop an image here</p>
+        <p style="color: #999; font-size: 14px;">Supports JPG, PNG, GIF</p>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+
+    <div id="controlsSection" class="hidden">
+        <div class="controls">
+            <div class="control-group">
+                <label for="patternType">Pattern Type</label>
+                <select id="patternType">
+                    <option value="circle">Classic Dots (Original)</option>
+                    <option value="square">Square Dots</option>
+                    <option value="diamond">Diamond Dots</option>
+                    <option value="line">Line Screen</option>
+                    <option value="crosshatch">Crosshatch</option>
+                    <option value="stochastic">Stochastic (Random)</option>
+                    <option value="stipple">Stipple</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="dotSize">Dot/Pattern Size</label>
+                <input type="range" id="dotSize" min="2" max="20" value="8">
+                <div class="value-display" id="dotSizeValue">8px</div>
+            </div>
+
+            <div class="control-group">
+                <label for="spacing">Spacing</label>
+                <input type="range" id="spacing" min="5" max="30" value="12">
+                <div class="value-display" id="spacingValue">12px</div>
+            </div>
+
+            <div class="control-group">
+                <label for="lineAngle">Line Angle (for line patterns)</label>
+                <input type="range" id="lineAngle" min="0" max="180" value="45">
+                <div class="value-display" id="lineAngleValue">45°</div>
+            </div>
+
+            <div class="control-group">
+                <label for="randomness">Randomness (for stochastic)</label>
+                <input type="range" id="randomness" min="0" max="100" value="30">
+                <div class="value-display" id="randomnessValue">30%</div>
+            </div>
+
+            <div class="control-group">
+                <label for="cyanColor">Cyan Color</label>
+                <input type="color" id="cyanColor" value="#00FFFF">
+            </div>
+
+            <div class="control-group">
+                <label for="magentaColor">Magenta Color</label>
+                <input type="color" id="magentaColor" value="#FF00FF">
+            </div>
+
+            <div class="control-group">
+                <label for="yellowColor">Yellow Color</label>
+                <input type="color" id="yellowColor" value="#FFFF00">
+            </div>
+
+            <div class="control-group">
+                <label for="blackColor">Black Color</label>
+                <input type="color" id="blackColor" value="#000000">
+            </div>
+
+            <div class="control-group">
+                <label for="angleOffset">Different Angles Per Channel</label>
+                <input type="checkbox" id="angleOffset" checked>
+                <span style="font-size: 14px; color: #666;">Use traditional CMYK angles</span>
+            </div>
+
+            <div class="control-group">
+                <label for="contrast">Contrast</label>
+                <input type="range" id="contrast" min="50" max="200" value="100">
+                <div class="value-display" id="contrastValue">100%</div>
+            </div>
+        </div>
+
+        <button class="process-btn" id="processBtn">Process Image</button>
+    </div>
+
+    <div id="previewSection" class="hidden">
+        <div class="preview-grid">
+            <div class="preview-item">
+                <h3>Original Image</h3>
+                <canvas id="originalCanvas"></canvas>
+            </div>
+
+            <div class="preview-item">
+                <h3>Cyan Channel</h3>
+                <canvas id="cyanCanvas"></canvas>
+                <button class="download-btn" onclick="downloadSVG('cyan')">Download Cyan SVG</button>
+            </div>
+
+            <div class="preview-item">
+                <h3>Magenta Channel</h3>
+                <canvas id="magentaCanvas"></canvas>
+                <button class="download-btn" onclick="downloadSVG('magenta')">Download Magenta SVG</button>
+            </div>
+
+            <div class="preview-item">
+                <h3>Yellow Channel</h3>
+                <canvas id="yellowCanvas"></canvas>
+                <button class="download-btn" onclick="downloadSVG('yellow')">Download Yellow SVG</button>
+            </div>
+
+            <div class="preview-item">
+                <h3>Black Channel</h3>
+                <canvas id="blackCanvas"></canvas>
+                <button class="download-btn" onclick="downloadSVG('black')">Download Black SVG</button>
+            </div>
+
+            <div class="preview-item">
+                <h3>Combined Preview</h3>
+                <canvas id="combinedCanvas"></canvas>
+                <button class="download-btn" onclick="downloadSVG('combined')">Download Combined SVG</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="js/colorUtils.js"></script>
+<script src="js/halftonePatterns.js"></script>
+<script src="js/svgExporter.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
