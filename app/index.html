@@ -22,13 +22,24 @@
             <div class="control-group">
                 <label for="patternType">Pattern Type</label>
                 <select id="patternType">
-                    <option value="circle">Classic Dots (Original)</option>
-                    <option value="square">Square Dots</option>
-                    <option value="diamond">Diamond Dots</option>
-                    <option value="line">Line Screen</option>
-                    <option value="crosshatch">Crosshatch</option>
-                    <option value="stochastic">Stochastic (Random)</option>
-                    <option value="stipple">Stipple</option>
+                    <optgroup label="Classic Patterns">
+                        <option value="circle">Classic Dots (Original)</option>
+                        <option value="square">Square Dots</option>
+                        <option value="diamond">Diamond Dots</option>
+                        <option value="line">Line Screen</option>
+                        <option value="crosshatch">Crosshatch</option>
+                        <option value="stochastic">Stochastic (Random)</option>
+                        <option value="stipple">Stipple</option>
+                    </optgroup>
+                    <optgroup label="Advanced Patterns">
+                        <option value="voronoi">Voronoi Cells</option>
+                        <option value="concentric">Concentric Circles</option>
+                        <option value="spiral">Spiral</option>
+                        <option value="hexagonal">Hexagonal Grid</option>
+                        <option value="wave">Wave Pattern</option>
+                        <option value="fractal">Fractal (Sierpinski)</option>
+                        <option value="flowfield">Flow Field</option>
+                    </optgroup>
                 </select>
             </div>
 
@@ -93,46 +104,35 @@
     </div>
 
     <div id="previewSection" class="hidden">
-        <div class="preview-grid">
+        <div class="preview-grid-simple">
             <div class="preview-item">
                 <h3>Original Image</h3>
                 <canvas id="originalCanvas"></canvas>
             </div>
 
             <div class="preview-item">
-                <h3>Cyan Channel</h3>
-                <canvas id="cyanCanvas"></canvas>
-                <button class="download-btn" onclick="downloadSVG('cyan')">Download Cyan SVG</button>
-            </div>
-
-            <div class="preview-item">
-                <h3>Magenta Channel</h3>
-                <canvas id="magentaCanvas"></canvas>
-                <button class="download-btn" onclick="downloadSVG('magenta')">Download Magenta SVG</button>
-            </div>
-
-            <div class="preview-item">
-                <h3>Yellow Channel</h3>
-                <canvas id="yellowCanvas"></canvas>
-                <button class="download-btn" onclick="downloadSVG('yellow')">Download Yellow SVG</button>
-            </div>
-
-            <div class="preview-item">
-                <h3>Black Channel</h3>
-                <canvas id="blackCanvas"></canvas>
-                <button class="download-btn" onclick="downloadSVG('black')">Download Black SVG</button>
-            </div>
-
-            <div class="preview-item">
-                <h3>Combined Preview</h3>
+                <h3>Halftone Result</h3>
                 <canvas id="combinedCanvas"></canvas>
-                <button class="download-btn" onclick="downloadSVG('combined')">Download Combined SVG</button>
+                <div class="download-buttons">
+                    <button class="download-btn primary" onclick="downloadSVG('combined')">Download Combined SVG</button>
+                    <button class="download-btn secondary" onclick="downloadAllChannels()">Download All Channels</button>
+                    <button class="download-btn secondary" onclick="downloadHPGL('combined')">Download HPGL</button>
+                </div>
             </div>
+        </div>
+
+        <!-- Hidden canvases for processing -->
+        <div style="display: none;">
+            <canvas id="cyanCanvas"></canvas>
+            <canvas id="magentaCanvas"></canvas>
+            <canvas id="yellowCanvas"></canvas>
+            <canvas id="blackCanvas"></canvas>
         </div>
     </div>
 </div>
 
 <script src="js/colorUtils.js"></script>
+<script src="js/advancedPatterns.js"></script>
 <script src="js/halftonePatterns.js"></script>
 <script src="js/svgExporter.js"></script>
 <script src="js/main.js"></script>

@@ -1,10 +1,11 @@
 /**
- * Advanced halftone pattern generators
+ * Advanced halftone pattern generators with new pattern types
  */
 
 class HalftonePatterns {
   constructor() {
     this.patterns = {};
+    this.advancedPatterns = new AdvancedPatterns();
   }
 
   /**
@@ -22,11 +23,12 @@ class HalftonePatterns {
 
     const color = document.getElementById(channel + 'Color').value;
     ctx.fillStyle = color;
+    ctx.strokeStyle = color;
 
     // Create SVG
     let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
     svg += `<rect width="${width}" height="${height}" fill="white"/>`;
-    svg += `<g fill="${color}">`;
+    svg += `<g fill="${color}" stroke="${color}">`;
 
     // Generate pattern based on type
     switch (type) {
@@ -51,6 +53,30 @@ class HalftonePatterns {
       case 'stipple':
         svg += this.generateStipplePattern(ctx, values, width, height, config);
         break;
+      // New advanced patterns
+      case 'voronoi':
+        svg += this.advancedPatterns.generateVoronoiPattern(ctx, values, width, height, config);
+        break;
+      case 'concentric':
+        svg += this.advancedPatterns.generateConcentricPattern(ctx, values, width, height, config);
+        break;
+      case 'spiral':
+        svg += this.advancedPatterns.generateSpiralPattern(ctx, values, width, height, config);
+        break;
+      case 'hexagonal':
+        svg += this.advancedPatterns.generateHexagonalPattern(ctx, values, width, height, config);
+        break;
+      case 'wave':
+        svg += this.advancedPatterns.generateWavePattern(ctx, values, width, height, config);
+        break;
+      case 'fractal':
+        svg += this.advancedPatterns.generateFractalPattern(ctx, values, width, height, config);
+        break;
+      case 'flowfield':
+        svg += this.advancedPatterns.generateFlowFieldPattern(ctx, values, width, height, config);
+        break;
+      default:
+        svg += this.generateCirclePattern(ctx, values, width, height, config);
     }
 
     svg += '</g></svg>';
