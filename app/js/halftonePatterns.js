@@ -1,25 +1,39 @@
 /**
- * Advanced halftone pattern generators with new pattern types
- * (CORRECTED to properly extend the original, working rotation logic to all grid-based patterns)
+ * @file This file contains the core logic for generating various halftone patterns.
+ * It acts as a controller, selecting the appropriate pattern-drawing function
+ * based on user configuration and applying it to the image data.
  */
 
+/**
+ * A class responsible for generating different types of halftone patterns.
+ * It uses a helper method `applyRotatedGrid` to centralize the complex
+ * grid rotation logic, ensuring consistent behavior across all grid-based patterns.
+ */
 class HalftonePatterns {
+  /**
+   * Initializes the HalftonePatterns class and its dependency, AdvancedPatterns.
+   */
   constructor() {
-    this.patterns = {};
+    /**
+     * An instance of the AdvancedPatterns class for generating complex patterns.
+     * @type {AdvancedPatterns}
+     */
     this.advancedPatterns = new AdvancedPatterns();
   }
 
-  // --- NEW: A reusable function that implements the ORIGINAL rotation logic ---
   /**
-   * Applies a core drawing function to a rotated grid.
-   * This contains the exact rotation logic from the original working patterns.
-   * @param {CanvasRenderingContext2D} ctx - The canvas context.
-   * @param {Array<number>} values - The image intensity values.
-   * @param {number} width - Canvas width.
-   * @param {number} height - Canvas height.
-   * @param {object} config - The processing configuration.
-   * @param {function} coreDrawFn - The function to call for each point on the grid. It receives (ctx, x, y, intensity, config).
-   * @returns {string} The generated SVG for the elements.
+   * A powerful helper function that applies a core drawing function to a rotated grid.
+   * This centralizes the logic for calculating rotated coordinates over a grid,
+   * which is used by most classic and some advanced patterns.
+   * @param {CanvasRenderingContext2D} ctx - The canvas context to draw on.
+   * @param {number[]} values - The array of image intensity values (0-1) for each pixel.
+   * @param {number} width - The canvas width.
+   * @param {number} height - The canvas height.
+   * @param {object} config - The processing configuration object.
+   * @param {number} config.angle - The rotation angle for the grid in degrees.
+   * @param {number} config.spacing - The spacing between grid points in pixels.
+   * @param {function(CanvasRenderingContext2D, number, number, number, object): string} coreDrawFn - The specific function to call for each point on the grid. It's responsible for drawing one shape and returning its SVG representation.
+   * @returns {string} The aggregated SVG content for all drawn elements.
    */
   applyRotatedGrid(ctx, values, width, height, config, coreDrawFn) {
     let svg = '';
@@ -28,22 +42,22 @@ class HalftonePatterns {
     const angleRad = (angle * Math.PI) / 180;
     const cosA = Math.cos(angleRad);
     const sinA = Math.sin(angleRad);
+    // The diagonal is used to ensure the rotated grid covers the entire canvas.
     const diagonal = Math.sqrt(width * width + height * height);
 
     for (let yGrid = -diagonal / 2; yGrid < diagonal / 2; yGrid += spacing) {
       for (let xGrid = -diagonal / 2; xGrid < diagonal / 2; xGrid += spacing) {
-        // For each point on the grid, calculate its rotated position on the canvas
+        // Rotate the grid point's coordinates to find its position on the canvas.
         const rotX = xGrid * cosA - yGrid * sinA + width / 2;
         const rotY = xGrid * sinA + yGrid * cosA + height / 2;
 
-        // Check if the rotated point is within the visible canvas area
+        // Only draw if the rotated point is within the canvas bounds.
         if (rotX >= 0 && rotX < width && rotY >= 0 && rotY < height) {
           const pixelX = Math.floor(rotX);
           const pixelY = Math.floor(rotY);
           const idx = pixelY * width + pixelX;
           const intensity = values[idx] || 0;
 
-          // Call the specific drawing function for the pattern
           const elementSvg = coreDrawFn(ctx, rotX, rotY, intensity, config);
           if (elementSvg) {
             svg += elementSvg;
@@ -55,28 +69,32 @@ class HalftonePatterns {
   }
 
   /**
-   * Generate halftone pattern based on type
+   * The main pattern generation function. It sets up the canvas and dispatches
+   * to the appropriate pattern-specific method based on the `type`.
+   * @param {string} type - The type of pattern to generate (e.g., 'circle', 'voronoi').
+   * @param {string} channel - The color channel being processed (e.g., 'cyan').
+   * @param {number[]} values - The array of image intensity values.
+   * @param {number} width - The canvas width.
+   * @param {number} height - The canvas height.
+   * @param {object} config - The configuration object for the pattern.
+   * @returns {string} The complete SVG string for the generated channel pattern.
    */
   generatePattern(type, channel, values, width, height, config) {
-    const canvas = document.getElementById(channel + 'Canvas');
+    const canvas = document.getElementById(`${channel}Canvas`);
     const ctx = canvas.getContext('2d');
     canvas.width = width;
     canvas.height = height;
 
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, width, height);
-
-    const color = document.getElementById(channel + 'Color').value;
+    const color = document.getElementById(`${channel}Color`).value;
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
+    ctx.clearRect(0, 0, width, height);
 
     let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
-    svg += `<rect width="width" height="height" fill="white"/>`;
+    svg += `<rect width="100%" height="100%" fill="white"/>`;
     svg += `<g fill="${color}" stroke="${color}">`;
 
-    // --- REFACTORED: The switch now uses the applyRotatedGrid helper for supported patterns ---
     switch (type) {
-      // Grid-based patterns that now use the universal rotation logic
       case 'circle':
         svg += this.generateCirclePattern(ctx, values, width, height, config);
         break;
@@ -98,39 +116,26 @@ class HalftonePatterns {
       case 'wave':
         svg += this.applyRotatedGrid(ctx, values, width, height, config, this.advancedPatterns.drawWave.bind(this.advancedPatterns));
         break;
-
-      // --- FIXED: Flow Field Logic ---
       case 'flowfield':
-        // Pre-calculate the gradient map first
         const gradients = this.advancedPatterns.calculateGradientField(values, width, height);
-        // Create a drawing function that has access to the gradients
-        const drawFnWithGradients = (ctx, x, y, intensity, config) => {
-          return this.advancedPatterns.drawFlowField(ctx, x, y, intensity, config, gradients, width);
-        };
+        const drawFnWithGradients = (ctx, x, y, intensity, cfg) => this.advancedPatterns.drawFlowField(ctx, x, y, intensity, cfg, gradients, width);
         svg += this.applyRotatedGrid(ctx, values, width, height, config, drawFnWithGradients);
         break;
-
-      // --- FIXED: Voronoi now has its own call to handle rotation internally ---
       case 'voronoi':
         svg += this.advancedPatterns.generateVoronoiPattern(ctx, values, width, height, config);
         break;
-
-      // Patterns with their own unique logic (rotation not applicable or already included)
       case 'line':
         svg += this.generateLinePattern(ctx, values, width, height, config);
         break;
       case 'crosshatch':
         svg += this.generateCrosshatchPattern(ctx, values, width, height, config);
         break;
-
-      // Non-grid patterns left untouched
       case 'stochastic':
         svg += this.generateStochasticPattern(ctx, values, width, height, config);
         break;
       case 'stipple':
         svg += this.generateStipplePattern(ctx, values, width, height, config);
         break;
-
       default:
         svg += this.generateCirclePattern(ctx, values, width, height, config);
     }
@@ -139,11 +144,20 @@ class HalftonePatterns {
     return svg;
   }
 
-  // --- REFACTORED: Classic patterns now use the helper, ensuring identical output but with cleaner code ---
+  /**
+   * Generates a classic circular dot halftone pattern.
+   * Each point on the grid is rendered as a circle whose radius is proportional to the image intensity.
+   * This method uses the `applyRotatedGrid` helper.
+   * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+   * @param {number[]} values - The array of image intensity values (0-1).
+   * @param {number} width - The width of the canvas.
+   * @param {number} height - The height of the canvas.
+   * @param {object} config - The processing configuration object.
+   * @returns {string} The aggregated SVG content for the generated circles.
+   */
   generateCirclePattern(ctx, values, width, height, config) {
     return this.applyRotatedGrid(ctx, values, width, height, config, (ctx, x, y, intensity, config) => {
-      const { dotSize } = config;
-      const radius = (dotSize / 2) * intensity;
+      const radius = (config.dotSize / 2) * intensity;
       if (radius > 0.5) {
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -154,10 +168,20 @@ class HalftonePatterns {
     });
   }
 
+  /**
+   * Generates a square dot halftone pattern.
+   * Each point on the grid is rendered as a square whose size is proportional to the image intensity.
+   * This method uses the `applyRotatedGrid` helper.
+   * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+   * @param {number[]} values - The array of image intensity values (0-1).
+   * @param {number} width - The width of the canvas.
+   * @param {number} height - The height of the canvas.
+   * @param {object} config - The processing configuration object.
+   * @returns {string} The aggregated SVG content for the generated squares.
+   */
   generateSquarePattern(ctx, values, width, height, config) {
     return this.applyRotatedGrid(ctx, values, width, height, config, (ctx, x, y, intensity, config) => {
-      const { dotSize } = config;
-      const size = dotSize * intensity;
+      const size = config.dotSize * intensity;
       if (size > 0.5) {
         const half = size / 2;
         ctx.fillRect(x - half, y - half, size, size);
@@ -167,10 +191,20 @@ class HalftonePatterns {
     });
   }
 
+  /**
+   * Generates a diamond-shaped dot halftone pattern.
+   * Each point on the grid is rendered as a square rotated by 45 degrees.
+   * This method uses the `applyRotatedGrid` helper.
+   * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+   * @param {number[]} values - The array of image intensity values (0-1).
+   * @param {number} width - The width of the canvas.
+   * @param {number} height - The height of the canvas.
+   * @param {object} config - The processing configuration object.
+   * @returns {string} The aggregated SVG content for the generated diamonds.
+   */
   generateDiamondPattern(ctx, values, width, height, config) {
     return this.applyRotatedGrid(ctx, values, width, height, config, (ctx, x, y, intensity, config) => {
-      const { dotSize } = config;
-      const size = dotSize * intensity;
+      const size = config.dotSize * intensity;
       if (size > 0.5) {
         const half = size / 2;
         ctx.save();
@@ -179,22 +213,28 @@ class HalftonePatterns {
         ctx.fillRect(-half, -half, size, size);
         ctx.restore();
 
-        const points = [
-          `${x},${y - half}`,
-          `${x + half},${y}`,
-          `${x},${y + half}`,
-          `${x - half},${y}`
-        ].join(' ');
-        return `<polygon points="${points}" transform="rotate(-45 ${x.toFixed(2)} ${y.toFixed(2)})"/>`;
+        const svgX = (x-half).toFixed(2);
+        const svgY = (y-half).toFixed(2);
+        const svgSize = size.toFixed(2);
+        return `<rect x="${svgX}" y="${svgY}" width="${svgSize}" height="${svgSize}" transform="rotate(45 ${x.toFixed(2)} ${y.toFixed(2)})"/>`;
       }
       return '';
     });
   }
 
-  // --- Patterns with custom logic remain the same ---
+  /**
+   * Generates a line screen pattern.
+   * This pattern uses its own grid logic to handle two separate angles: the grid angle and the line angle.
+   * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+   * @param {number[]} values - The array of image intensity values (0-1).
+   * @param {number} width - The width of the canvas.
+   * @param {number} height - The height of the canvas.
+   * @param {object} config - The processing configuration object.
+   * @returns {string} The aggregated SVG content for the generated lines.
+   */
   generateLinePattern(ctx, values, width, height, config) {
-    const { dotSize, spacing, angle, lineAngle } = config;
     let svg = '';
+    const { dotSize, spacing, angle, lineAngle } = config;
     const angleRad = (angle * Math.PI) / 180;
     const lineAngleRad = (lineAngle * Math.PI) / 180;
     const diagonal = Math.sqrt(width * width + height * height);
@@ -219,7 +259,6 @@ class HalftonePatterns {
             ctx.moveTo(rotX - dx, rotY - dy);
             ctx.lineTo(rotX + dx, rotY + dy);
             ctx.stroke();
-
             svg += `<line x1="${(rotX - dx).toFixed(2)}" y1="${(rotY - dy).toFixed(2)}" x2="${(rotX + dx).toFixed(2)}" y2="${(rotY + dy).toFixed(2)}" stroke-width="${lineWidth.toFixed(2)}" stroke="currentColor"/>`;
           }
         }
@@ -228,12 +267,19 @@ class HalftonePatterns {
     return svg;
   }
 
-  // (The rest of the file: crosshatch, stochastic, stipple, getStandardAngles, etc. remain unchanged from your original)
-  // ... [UNCHANGED CODE] ...
+  /**
+   * Generates a crosshatch pattern.
+   * In dark areas, it draws two perpendicular sets of lines. In lighter areas, only one.
+   * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+   * @param {number[]} values - The array of image intensity values (0-1).
+   * @param {number} width - The width of the canvas.
+   * @param {number} height - The height of the canvas.
+   * @param {object} config - The processing configuration object.
+   * @returns {string} The aggregated SVG content for the generated lines.
+   */
   generateCrosshatchPattern(ctx, values, width, height, config) {
-    const { dotSize, spacing, angle } = config;
     let svg = '';
-
+    const { spacing, angle } = config;
     ctx.lineWidth = 1;
 
     for (let y = 0; y < height; y += spacing) {
@@ -246,32 +292,26 @@ class HalftonePatterns {
           const numLines = Math.floor(intensity * 4) + 1;
 
           for (let i = 0; i < numLines; i++) {
-            const offset = (i - numLines/2) * 2;
-            const angle1 = 45 + angle;
-            const angle2 = -45 + angle;
+            const offset = (i - numLines / 2) * 2;
+            const angle1Rad = (45 + angle) * Math.PI / 180;
+            const angle2Rad = (-45 + angle) * Math.PI / 180;
 
-            // First diagonal
-            const dx1 = Math.cos(angle1 * Math.PI / 180) * lineLength / 2;
-            const dy1 = Math.sin(angle1 * Math.PI / 180) * lineLength / 2;
-
+            const dx1 = Math.cos(angle1Rad) * lineLength / 2;
+            const dy1 = Math.sin(angle1Rad) * lineLength / 2;
             ctx.beginPath();
-            ctx.moveTo(x - dx1 + offset, y - dy1 + offset);
-            ctx.lineTo(x + dx1 + offset, y + dy1 + offset);
+            ctx.moveTo(x - dx1 + offset, y - dy1);
+            ctx.lineTo(x + dx1 + offset, y + dy1);
             ctx.stroke();
-
-            svg += `<line x1="${(x - dx1 + offset).toFixed(2)}" y1="${(y - dy1 + offset).toFixed(2)}" x2="${(x + dx1 + offset).toFixed(2)}" y2="${(y + dy1 + offset).toFixed(2)}" stroke-width="1" stroke="currentColor"/>`;
+            svg += `<line x1="${(x - dx1 + offset).toFixed(2)}" y1="${(y - dy1).toFixed(2)}" x2="${(x + dx1 + offset).toFixed(2)}" y2="${(y + dy1).toFixed(2)}" stroke-width="1"/>`;
 
             if (intensity > 0.5) {
-              // Second diagonal for darker areas
-              const dx2 = Math.cos(angle2 * Math.PI / 180) * lineLength / 2;
-              const dy2 = Math.sin(angle2 * Math.PI / 180) * lineLength / 2;
-
+              const dx2 = Math.cos(angle2Rad) * lineLength / 2;
+              const dy2 = Math.sin(angle2Rad) * lineLength / 2;
               ctx.beginPath();
-              ctx.moveTo(x - dx2 + offset, y - dy2 + offset);
-              ctx.lineTo(x + dx2 + offset, y + dy2 + offset);
+              ctx.moveTo(x - dx2, y - dy2 - offset);
+              ctx.lineTo(x + dx2, y + dy2 - offset);
               ctx.stroke();
-
-              svg += `<line x1="${(x - dx2 + offset).toFixed(2)}" y1="${(y - dy2 + offset).toFixed(2)}" x2="${(x + dx2 + offset).toFixed(2)}" y2="${(y + dy2 + offset).toFixed(2)}" stroke-width="1" stroke="currentColor"/>`;
+              svg += `<line x1="${(x - dx2).toFixed(2)}" y1="${(y - dy2 - offset).toFixed(2)}" x2="${(x + dx2).toFixed(2)}" y2="${(y + dy2 - offset).toFixed(2)}" stroke-width="1"/>`;
             }
           }
         }
@@ -280,6 +320,17 @@ class HalftonePatterns {
     return svg;
   }
 
+  /**
+   * Generates a stochastic (randomized) dot pattern.
+   * Dots are placed randomly, with the probability of a dot appearing being higher in darker areas.
+   * This logic was reverted to match the original implementation for functional parity.
+   * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+   * @param {number[]} values - The array of image intensity values (0-1).
+   * @param {number} width - The width of the canvas.
+   * @param {number} height - The height of the canvas.
+   * @param {object} config - The processing configuration object.
+   * @returns {string} The aggregated SVG content for the generated circles.
+   */
   generateStochasticPattern(ctx, values, width, height, config) {
     const { dotSize, spacing, randomness } = config;
     let svg = '';
@@ -311,6 +362,16 @@ class HalftonePatterns {
     return svg;
   }
 
+  /**
+   * Generates a stipple pattern, another form of random dot distribution.
+   * This implementation adds a second, smaller set of dots in darker areas to increase density.
+   * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+   * @param {number[]} values - The array of image intensity values (0-1).
+   * @param {number} width - The width of the canvas.
+   * @param {number} height - The height of the canvas.
+   * @param {object} config - The processing configuration object.
+   * @returns {string} The aggregated SVG content for the generated circles.
+   */
   generateStipplePattern(ctx, values, width, height, config) {
     const { dotSize, spacing } = config;
     let svg = '';
@@ -348,6 +409,12 @@ class HalftonePatterns {
     return svg;
   }
 
+  /**
+   * Returns the standard, industry-accepted screen angles for CMYK printing.
+   * These specific angles (15, 75, 0, 45) are chosen to minimize moiré patterns
+   * when the color channels are overlaid.
+   * @returns {{cyan: number, magenta: number, yellow: number, black: number}} An object with the angle for each channel.
+   */
   getStandardAngles() {
     return {
       cyan: 15,
@@ -355,19 +422,6 @@ class HalftonePatterns {
       yellow: 0,
       black: 45
     };
-  }
-
-  mapIntensity(intensity, curve = 'linear') {
-    switch (curve) {
-      case 'linear':
-        return intensity;
-      case 'gamma':
-        return Math.pow(intensity, 1.4);
-      case 'contrast':
-        return intensity < 0.5 ? 2 * intensity * intensity : 1 - 2 * (1 - intensity) * (1 - intensity);
-      default:
-        return intensity;
-    }
   }
 }
 
