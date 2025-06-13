@@ -32,7 +32,14 @@ class HalftoneApp {
      */
     this.exporter = new SVGExporter();
 
+    /**
+     * Instance of the ColorManager class for generating harmonious palettes.
+     * @type {ColorManager}
+     */
+    this.colorManager = ColorManager;
+
     this.initializeEventListeners();
+    this.updateUIForCurrentSettings();
   }
 
   /**
@@ -66,7 +73,8 @@ class HalftoneApp {
       { id: 'spacing',    display: 'spacingValue',    suffix: 'px' },
       { id: 'lineAngle',  display: 'lineAngleValue',  suffix: '°' },
       { id: 'randomness', display: 'randomnessValue', suffix: '%' },
-      { id: 'contrast',   display: 'contrastValue',   suffix: '%' }
+      { id: 'contrast',   display: 'contrastValue',   suffix: '%' },
+      { id: 'strokeWidth', display: 'strokeWidthValue', suffix: 'px', fixed: 1 }
     ];
 
     controls.forEach(control => {
@@ -74,37 +82,93 @@ class HalftoneApp {
       const display = document.getElementById(control.display);
       if (element && display) {
         element.addEventListener('input', (e) => {
-          display.textContent = e.target.value + control.suffix;
+          const value = control.fixed ? parseFloat(e.target.value).toFixed(control.fixed) : e.target.value;
+          display.textContent = value + control.suffix;
         });
       }
     });
 
-    const patternType = document.getElementById('patternType');
-    if (patternType) {
-      patternType.addEventListener('change', this.updateControlVisibility.bind(this));
-      this.updateControlVisibility(); // Initial call to set correct state
+    // Listeners for controls that affect UI visibility
+    const uiAffectingControls = ['patternType', 'colorMode'];
+    uiAffectingControls.forEach(id => {
+      document.getElementById(id).addEventListener('change', this.updateUIForCurrentSettings.bind(this));
+    });
+    document.querySelectorAll('input[name="renderStyle"]').forEach(radio => {
+      radio.addEventListener('change', this.updateUIForCurrentSettings.bind(this));
+    });
+
+    // Listener for palette generator
+    document.getElementById('paletteBtn').addEventListener('click', this.applyHarmoniousPalette.bind(this));
+  }
+
+  /**
+   * Updates the visibility and content of UI elements based on current settings.
+   */
+  updateUIForCurrentSettings() {
+    const patternType = document.getElementById('patternType').value;
+    const colorMode = document.getElementById('colorMode').value;
+    const renderStyle = document.querySelector('input[name="renderStyle"]:checked').value;
+
+    // 1. Update pattern-specific controls
+    const lineAngleGroup = document.getElementById('lineAngle').closest('.control-group');
+    const randomnessGroup = document.getElementById('randomness').closest('.control-group');
+    if (lineAngleGroup) lineAngleGroup.style.display = ['line', 'crosshatch', 'wave'].includes(patternType) ? 'block' : 'none';
+    if (randomnessGroup) randomnessGroup.style.display = ['stochastic', 'stipple', 'voronoi'].includes(patternType) ? 'block' : 'none';
+    this.showPatternTip(patternType);
+
+    // 2. Update render style controls
+    document.getElementById('strokeWidthGroup').style.display = renderStyle === 'stroke' ? 'block' : 'none';
+
+    // 3. Update color mode controls
+    const numChannels = { monochrome: 1, duotone: 2, tritone: 3, cmyk: 4 }[colorMode];
+    const colorLabels = {
+      monochrome: ['Key'],
+      duotone: ['Tone 1 (Dark)', 'Tone 2 (Light)'],
+      tritone: ['Shadows', 'Midtones', 'Highlights'],
+      cmyk: ['Cyan', 'Magenta', 'Yellow', 'Black']
+    };
+
+    const channelIds = ['cyan', 'magenta', 'yellow', 'black'];
+
+    document.getElementById('color-card-title').textContent = `${colorMode.charAt(0).toUpperCase() + colorMode.slice(1)} Colors`;
+
+    for (let i = 0; i < 4; i++) {
+      const channelId = channelIds[i];
+      const group = document.getElementById(`color-group-${channelId}`);
+      const label = document.getElementById(`color-label-${channelId}`);
+      if (i < numChannels) {
+        group.style.display = 'block';
+        label.textContent = colorLabels[colorMode][i];
+      } else {
+        group.style.display = 'none';
+      }
     }
   }
 
   /**
-   * Shows or hides certain controls based on the selected pattern type.
-   * For example, 'Line Angle' is only relevant for line-based patterns.
+   * Applies a random harmonious palette to the color pickers and re-processes the image.
    */
-  updateControlVisibility() {
-    const patternType = document.getElementById('patternType').value;
-    const lineAngleGroup = document.getElementById('lineAngle').closest('.control-group');
-    const randomnessGroup = document.getElementById('randomness').closest('.control-group');
+  applyHarmoniousPalette() {
+    const colorMode = document.getElementById('colorMode').value;
+    const numChannels = { monochrome: 1, duotone: 2, tritone: 3, cmyk: 4 }[colorMode];
+    const uiChannelIds = ['cyan', 'magenta', 'yellow', 'black'];
 
-    if (lineAngleGroup) {
-      const isVisible = ['line', 'crosshatch', 'wave'].includes(patternType);
-      lineAngleGroup.style.display = isVisible ? 'block' : 'none';
-    }
-    if (randomnessGroup) {
-      const isVisible = ['stochastic', 'stipple', 'voronoi'].includes(patternType);
-      randomnessGroup.style.display = isVisible ? 'block' : 'none';
+    let palette;
+    if (colorMode === 'cmyk') {
+      const cmykPalette = this.colorManager.getCmykPalette();
+      palette = [cmykPalette.c, cmykPalette.m, cmykPalette.y, cmykPalette.k];
+    } else {
+      palette = this.colorManager.generateProgrammaticPalette(numChannels);
     }
 
-    this.showPatternTip(patternType);
+    for (let i = 0; i < numChannels; i++) {
+      document.getElementById(`${uiChannelIds[i]}Color`).value = palette[i];
+    }
+
+    // If an image has already been uploaded and processed, re-process with new colors.
+    if (this.uploadedImage && !document.getElementById('previewSection').classList.contains('hidden')) {
+      this.processImage();
+    }
   }
 
   /**
@@ -210,6 +274,26 @@ class HalftoneApp {
    * @returns {object} The configuration object for the image processing.
    */
   getProcessingConfig() {
+    const colorMode = document.getElementById('colorMode').value;
+    const numChannels = { monochrome: 1, duotone: 2, tritone: 3, cmyk: 4 }[colorMode];
+    const uiChannelIds = ['cyan', 'magenta', 'yellow', 'black'];
+
+    const colors = {};
+    const channelNames = [];
+    const genericChannelNames = {
+      monochrome: ['key'],
+      duotone: ['tone1', 'tone2'],
+      tritone: ['shadows', 'midtones', 'highlights'],
+      cmyk: ['cyan', 'magenta', 'yellow', 'black']
+    }[colorMode];
+
+    for (let i = 0; i < numChannels; i++) {
+      const genericName = genericChannelNames[i];
+      const colorValue = document.getElementById(`${uiChannelIds[i]}Color`).value;
+      colors[genericName] = colorValue;
+      channelNames.push(genericName);
+    }
+
     return {
       patternType: document.getElementById('patternType').value,
       dotSize: parseInt(document.getElementById('dotSize').value, 10),
@@ -218,12 +302,11 @@ class HalftoneApp {
       randomness: parseInt(document.getElementById('randomness').value, 10),
       contrast: parseInt(document.getElementById('contrast').value, 10),
       useAngleOffset: document.getElementById('angleOffset').checked,
-      colors: {
-        cyan: document.getElementById('cyanColor').value,
-        magenta: document.getElementById('magentaColor').value,
-        yellow: document.getElementById('yellowColor').value,
-        black: document.getElementById('blackColor').value
-      }
+      colorMode: colorMode,
+      renderStyle: document.querySelector('input[name="renderStyle"]:checked').value,
+      strokeWidth: parseFloat(document.getElementById('strokeWidth').value),
+      colors: colors,
+      channelNames: channelNames
     };
   }
 
@@ -251,12 +334,39 @@ class HalftoneApp {
           return;
         };
 
-        const cmykData = rgbToCmyk(imageData.data, imageData.width, imageData.height, config.contrast);
-        const angles = config.useAngleOffset ? this.patterns.getStandardAngles() : { cyan: 0, magenta: 0, yellow: 0, black: 0 };
+        // Dynamic color separation
+        let channelData;
+        switch (config.colorMode) {
+          case 'monochrome':
+            channelData = { key: rgbToGrayscale(imageData.data, config.contrast) };
+            break;
+          case 'duotone':
+            const duo = rgbToMultiTone(imageData.data, 2, config.contrast);
+            channelData = { tone1: duo.tone1, tone2: duo.tone2 };
+            break;
+          case 'tritone':
+            const tri = rgbToMultiTone(imageData.data, 3, config.contrast);
+            channelData = { shadows: tri.tone1, midtones: tri.tone2, highlights: tri.tone3 };
+            break;
+          case 'cmyk':
+          default:
+            const cmyk = rgbToCmyk(imageData.data, imageData.width, imageData.height, config.contrast);
+            channelData = { cyan: cmyk.c, magenta: cmyk.m, yellow: cmyk.y, black: cmyk.k };
+            break;
+        }
 
-        this.generateChannelHalftones(cmykData, angles, config);
-        this.generateCombinedPreview();
-        this.logAndDisplayProcessingStats();
+        const standardAngles = this.patterns.getStandardAngles();
+        const modeAngles = {
+          monochrome: { key: 45 },
+          duotone: { tone1: 75, tone2: 15 },
+          tritone: { shadows: 75, midtones: 15, highlights: 0 },
+          cmyk: standardAngles
+        };
+        const angles = config.useAngleOffset ? modeAngles[config.colorMode] : {};
+
+        this.generateChannelHalftones(channelData, angles, config);
+        this.generateCombinedPreview(config.channelNames, config.colors);
+        this.logAndDisplayProcessingStats(config.channelNames);
 
       } catch (error) {
         console.error('An error occurred during image processing:', error);
@@ -315,24 +425,32 @@ class HalftoneApp {
   }
 
   /**
-   * Generates the halftone pattern for each CMYK channel individually.
-   * @param {object} cmykData - The separated CMYK channel data.
+   * Generates the halftone pattern for each color channel individually.
+   * @param {Object.<string, number[]>} channelData - The separated channel data.
    * @param {object} angles - The screen angles for each channel.
    * @param {object} config - The main processing configuration.
    */
-  generateChannelHalftones(cmykData, angles, config) {
-    const channels = ['cyan', 'magenta', 'yellow', 'black'];
-    const channelDataMap = { cyan: cmykData.c, magenta: cmykData.m, yellow: cmykData.y, black: cmykData.k };
+  generateChannelHalftones(channelData, angles, config) {
+    const channelNames = Object.keys(channelData);
 
-    channels.forEach(channel => {
-      const channelConfig = { ...config, angle: angles[channel] || 0 };
+    channelNames.forEach(channel => {
+      let canvas = document.getElementById(`${channel}Canvas`);
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.id = `${channel}Canvas`;
+        canvas.style.display = 'none';
+        document.body.appendChild(canvas);
+      }
+
+      const channelConfig = { ...config, angle: angles[channel] || 0, color: config.colors[channel] };
       const svg = this.patterns.generatePattern(
         config.patternType,
         channel,
-        channelDataMap[channel],
+        channelData[channel],
         this.uploadedImage.width,
         this.uploadedImage.height,
-        channelConfig
+        channelConfig,
+        canvas // Pass the canvas to the generator
       );
       this.exporter.storeSVG(channel, svg);
     });
@@ -340,8 +458,10 @@ class HalftoneApp {
 
   /**
    * Renders the combined, multi-color halftone preview by overlaying the individual channel canvases.
+   * @param {string[]} channelNames - The list of channel names to combine.
+   * @param {Object.<string, string>} colors - A map of channel names to hex color codes.
    */
-  generateCombinedPreview() {
+  generateCombinedPreview(channelNames, colors) {
     const canvas = document.getElementById('combinedCanvas');
     const ctx = canvas.getContext('2d');
     canvas.width = this.uploadedImage.width;
@@ -351,26 +471,26 @@ class HalftoneApp {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.globalCompositeOperation = 'multiply';
 
-    ['cyan', 'magenta', 'yellow', 'black'].forEach(channel => {
+    channelNames.forEach(channel => {
       const sourceCanvas = document.getElementById(`${channel}Canvas`);
       if (sourceCanvas) {
         ctx.drawImage(sourceCanvas, 0, 0);
       }
     });
 
-    this.exporter.generateCombinedSVG(canvas.width, canvas.height);
+    this.exporter.generateCombinedSVG(canvas.width, canvas.height, channelNames, colors);
   }
 
   /**
    * Gathers plotting statistics, logs them to the console, and displays them in the UI.
+   * @param {string[]} channelNames - The list of channel names to get stats for.
    */
-  logAndDisplayProcessingStats() {
-    const channels = ['cyan', 'magenta', 'yellow', 'black'];
+  logAndDisplayProcessingStats(channelNames) {
     let totalElements = 0;
     let totalEstimatedTime = 0;
     console.log('=== Processing Statistics ===');
 
-    channels.forEach(channel => {
+    channelNames.forEach(channel => {
       const stats = this.exporter.getPlottingStats(channel);
       if (stats) {
         console.log(`${channel.toUpperCase()} Channel:`, stats);

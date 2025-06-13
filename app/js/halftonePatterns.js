@@ -77,15 +77,15 @@ class HalftonePatterns {
    * @param {number} width - The canvas width.
    * @param {number} height - The canvas height.
    * @param {object} config - The configuration object for the pattern.
+   * @param {HTMLCanvasElement} canvas - The canvas element to draw on.
    * @returns {string} The complete SVG string for the generated channel pattern.
    */
-  generatePattern(type, channel, values, width, height, config) {
-    const canvas = document.getElementById(`${channel}Canvas`);
+  generatePattern(type, channel, values, width, height, config, canvas) {
     const ctx = canvas.getContext('2d');
     canvas.width = width;
     canvas.height = height;
 
-    const color = document.getElementById(`${channel}Color`).value;
+    const color = config.color;
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
     ctx.clearRect(0, 0, width, height);
@@ -161,8 +161,14 @@ class HalftonePatterns {
       if (radius > 0.5) {
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fill();
-        return `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${radius.toFixed(2)}"/>`;
+        if (config.renderStyle === 'stroke') {
+          ctx.lineWidth = config.strokeWidth;
+          ctx.stroke();
+          return `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="currentColor" stroke-width="${config.strokeWidth.toFixed(2)}"/>`;
+        } else {
+          ctx.fill();
+          return `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${radius.toFixed(2)}"/>`;
+        }
       }
       return '';
     });
@@ -184,8 +190,14 @@ class HalftonePatterns {
       const size = config.dotSize * intensity;
       if (size > 0.5) {
         const half = size / 2;
-        ctx.fillRect(x - half, y - half, size, size);
-        return `<rect x="${(x - half).toFixed(2)}" y="${(y - half).toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}"/>`;
+        if (config.renderStyle === 'stroke') {
+          ctx.lineWidth = config.strokeWidth;
+          ctx.strokeRect(x - half, y - half, size, size);
+          return `<rect x="${(x - half).toFixed(2)}" y="${(y - half).toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}" fill="none" stroke="currentColor" stroke-width="${config.strokeWidth.toFixed(2)}"/>`;
+        } else {
+          ctx.fillRect(x - half, y - half, size, size);
+          return `<rect x="${(x - half).toFixed(2)}" y="${(y - half).toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}"/>`;
+        }
       }
       return '';
     });
@@ -210,13 +222,22 @@ class HalftonePatterns {
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(Math.PI / 4);
-        ctx.fillRect(-half, -half, size, size);
-        ctx.restore();
 
-        const svgX = (x-half).toFixed(2);
-        const svgY = (y-half).toFixed(2);
+        const svgX = (-half).toFixed(2);
+        const svgY = (-half).toFixed(2);
         const svgSize = size.toFixed(2);
-        return `<rect x="${svgX}" y="${svgY}" width="${svgSize}" height="${svgSize}" transform="rotate(45 ${x.toFixed(2)} ${y.toFixed(2)})"/>`;
+        let svgTransform = `transform="rotate(45 ${x.toFixed(2)} ${y.toFixed(2)})"`;
+
+        if (config.renderStyle === 'stroke') {
+          ctx.lineWidth = config.strokeWidth;
+          ctx.strokeRect(-half, -half, size, size);
+          ctx.restore();
+          return `<rect x="${svgX}" y="${svgY}" width="${svgSize}" height="${svgSize}" fill="none" stroke="currentColor" stroke-width="${config.strokeWidth.toFixed(2)}" ${svgTransform}/>`;
+        } else {
+          ctx.fillRect(-half, -half, size, size);
+          ctx.restore();
+          return `<rect x="${svgX}" y="${svgY}" width="${svgSize}" height="${svgSize}" ${svgTransform}/>`;
+        }
       }
       return '';
     });
@@ -234,7 +255,7 @@ class HalftonePatterns {
    */
   generateLinePattern(ctx, values, width, height, config) {
     let svg = '';
-    const { dotSize, spacing, angle, lineAngle } = config;
+    const { dotSize, spacing, angle, lineAngle, renderStyle, strokeWidth } = config;
     const angleRad = (angle * Math.PI) / 180;
     const lineAngleRad = (lineAngle * Math.PI) / 180;
     const diagonal = Math.sqrt(width * width + height * height);
@@ -247,19 +268,20 @@ class HalftonePatterns {
         if (rotX >= 0 && rotX < width && rotY >= 0 && rotY < height) {
           const idx = Math.floor(rotY) * width + Math.floor(rotX);
           const intensity = values[idx] || 0;
-          const lineWidth = dotSize * intensity;
+          const calculatedLineWidth = dotSize * intensity;
+          const finalLineWidth = renderStyle === 'stroke' ? strokeWidth : calculatedLineWidth;
 
-          if (lineWidth > 0.2) {
+          if (finalLineWidth > 0.2) {
             const lineLength = spacing * 0.8;
             const dx = Math.cos(lineAngleRad) * lineLength / 2;
             const dy = Math.sin(lineAngleRad) * lineLength / 2;
 
-            ctx.lineWidth = lineWidth;
+            ctx.lineWidth = finalLineWidth;
             ctx.beginPath();
             ctx.moveTo(rotX - dx, rotY - dy);
             ctx.lineTo(rotX + dx, rotY + dy);
             ctx.stroke();
-            svg += `<line x1="${(rotX - dx).toFixed(2)}" y1="${(rotY - dy).toFixed(2)}" x2="${(rotX + dx).toFixed(2)}" y2="${(rotY + dy).toFixed(2)}" stroke-width="${lineWidth.toFixed(2)}" stroke="currentColor"/>`;
+            svg += `<line x1="${(rotX - dx).toFixed(2)}" y1="${(rotY - dy).toFixed(2)}" x2="${(rotX + dx).toFixed(2)}" y2="${(rotY + dy).toFixed(2)}" stroke-width="${finalLineWidth.toFixed(2)}" stroke="currentColor"/>`;
           }
         }
       }
@@ -279,8 +301,9 @@ class HalftonePatterns {
    */
   generateCrosshatchPattern(ctx, values, width, height, config) {
     let svg = '';
-    const { spacing, angle } = config;
-    ctx.lineWidth = 1;
+    const { spacing, angle, renderStyle, strokeWidth } = config;
+    ctx.lineWidth = renderStyle === 'stroke' ? strokeWidth : 1;
+    const finalStrokeWidth = renderStyle === 'stroke' ? strokeWidth : 1;
 
     for (let y = 0; y < height; y += spacing) {
       for (let x = 0; x < width; x += spacing) {
@@ -302,7 +325,7 @@ class HalftonePatterns {
             ctx.moveTo(x - dx1 + offset, y - dy1);
             ctx.lineTo(x + dx1 + offset, y + dy1);
             ctx.stroke();
-            svg += `<line x1="${(x - dx1 + offset).toFixed(2)}" y1="${(y - dy1).toFixed(2)}" x2="${(x + dx1 + offset).toFixed(2)}" y2="${(y + dy1).toFixed(2)}" stroke-width="1"/>`;
+            svg += `<line x1="${(x - dx1 + offset).toFixed(2)}" y1="${(y - dy1).toFixed(2)}" x2="${(x + dx1 + offset).toFixed(2)}" y2="${(y + dy1).toFixed(2)}" stroke-width="${finalStrokeWidth}"/>`;
 
             if (intensity > 0.5) {
               const dx2 = Math.cos(angle2Rad) * lineLength / 2;
@@ -311,7 +334,7 @@ class HalftonePatterns {
               ctx.moveTo(x - dx2, y - dy2 - offset);
               ctx.lineTo(x + dx2, y + dy2 - offset);
               ctx.stroke();
-              svg += `<line x1="${(x - dx2).toFixed(2)}" y1="${(y - dy2 - offset).toFixed(2)}" x2="${(x + dx2).toFixed(2)}" y2="${(y + dy2 - offset).toFixed(2)}" stroke-width="1"/>`;
+              svg += `<line x1="${(x - dx2).toFixed(2)}" y1="${(y - dy2 - offset).toFixed(2)}" x2="${(x + dx2).toFixed(2)}" y2="${(y + dy2 - offset).toFixed(2)}" stroke-width="${finalStrokeWidth}"/>`;
             }
           }
         }
@@ -332,7 +355,7 @@ class HalftonePatterns {
    * @returns {string} The aggregated SVG content for the generated circles.
    */
   generateStochasticPattern(ctx, values, width, height, config) {
-    const { dotSize, spacing, randomness } = config;
+    const { dotSize, spacing, randomness, renderStyle, strokeWidth } = config;
     let svg = '';
     let seed = 12345;
     const random = () => {
@@ -353,8 +376,14 @@ class HalftonePatterns {
             const radius = dotSize / 4 + (random() * dotSize / 4);
             ctx.beginPath();
             ctx.arc(randomX, randomY, radius, 0, Math.PI * 2);
-            ctx.fill();
-            svg += `<circle cx="${randomX.toFixed(2)}" cy="${randomY.toFixed(2)}" r="${radius.toFixed(2)}"/>`;
+            if (renderStyle === 'stroke') {
+              ctx.lineWidth = strokeWidth;
+              ctx.stroke();
+              svg += `<circle cx="${randomX.toFixed(2)}" cy="${randomY.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="currentColor" stroke-width="${strokeWidth.toFixed(2)}"/>`;
+            } else {
+              ctx.fill();
+              svg += `<circle cx="${randomX.toFixed(2)}" cy="${randomY.toFixed(2)}" r="${radius.toFixed(2)}"/>`;
+            }
           }
         }
       }
@@ -373,7 +402,7 @@ class HalftonePatterns {
    * @returns {string} The aggregated SVG content for the generated circles.
    */
   generateStipplePattern(ctx, values, width, height, config) {
-    const { dotSize, spacing } = config;
+    const { dotSize, spacing, renderStyle, strokeWidth } = config;
     let svg = '';
     const stippleSpacing = spacing / 2;
     for (let y = 0; y < height; y += stippleSpacing) {
@@ -388,8 +417,14 @@ class HalftonePatterns {
           const dotY = y + offsetY;
           ctx.beginPath();
           ctx.arc(dotX, dotY, radius, 0, Math.PI * 2);
-          ctx.fill();
-          svg += `<circle cx="${dotX.toFixed(2)}" cy="${dotY.toFixed(2)}" r="${radius.toFixed(2)}"/>`;
+          if (renderStyle === 'stroke') {
+            ctx.lineWidth = strokeWidth;
+            ctx.stroke();
+            svg += `<circle cx="${dotX.toFixed(2)}" cy="${dotY.toFixed(2)}" r="${radius.toFixed(2)}" fill="none" stroke="currentColor" stroke-width="${strokeWidth.toFixed(2)}"/>`;
+          } else {
+            ctx.fill();
+            svg += `<circle cx="${dotX.toFixed(2)}" cy="${dotY.toFixed(2)}" r="${radius.toFixed(2)}"/>`;
+          }
         }
         if (intensity > 0.3 && Math.random() < intensity * 0.5) {
           const smallRadius = dotSize / 12;
@@ -400,8 +435,14 @@ class HalftonePatterns {
           if (smallDotX >= 0 && smallDotX < width && smallDotY >= 0 && smallDotY < height) {
             ctx.beginPath();
             ctx.arc(smallDotX, smallDotY, smallRadius, 0, Math.PI * 2);
-            ctx.fill();
-            svg += `<circle cx="${smallDotX.toFixed(2)}" cy="${smallDotY.toFixed(2)}" r="${smallRadius.toFixed(2)}"/>`;
+            if (renderStyle === 'stroke') {
+              ctx.lineWidth = strokeWidth;
+              ctx.stroke();
+              svg += `<circle cx="${smallDotX.toFixed(2)}" cy="${smallDotY.toFixed(2)}" r="${smallRadius.toFixed(2)}" fill="none" stroke="currentColor" stroke-width="${strokeWidth.toFixed(2)}"/>`;
+            } else {
+              ctx.fill();
+              svg += `<circle cx="${smallDotX.toFixed(2)}" cy="${smallDotY.toFixed(2)}" r="${smallRadius.toFixed(2)}"/>`;
+            }
           }
         }
       }

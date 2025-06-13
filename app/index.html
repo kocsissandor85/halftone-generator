@@ -81,61 +81,88 @@
                         <input type="range" id="spacing" min="5" max="30" value="12">
                         <div class="value-display" id="spacingValue">12px</div>
                     </div>
-                </div>
-                <!-- /Pattern Settings Card -->
-
-                <!-- Advanced Settings Card -->
-                <div class="control-card">
-                    <h3>Advanced Settings</h3>
-                    <div class="control-group">
-                        <label for="lineAngle">Line Angle</label>
-                        <input type="range" id="lineAngle" min="0" max="180" value="45">
-                        <div class="value-display" id="lineAngleValue">45°</div>
-                    </div>
-                    <div class="control-group">
-                        <label for="randomness">Randomness</label>
-                        <input type="range" id="randomness" min="0" max="100" value="30">
-                        <div class="value-display" id="randomnessValue">30%</div>
-                    </div>
                     <div class="control-group">
                         <label for="contrast">Contrast</label>
                         <input type="range" id="contrast" min="50" max="200" value="100">
                         <div class="value-display" id="contrastValue">100%</div>
                     </div>
-                    <div class="control-group checkbox-group">
-                        <label for="angleOffset">
-                            <input type="checkbox" id="angleOffset" checked>
-                            <span class="checkmark"></span>
-                            Use Traditional CMYK Angles
-                        </label>
-                        <span class="help-text">Applies industry-standard screen angles per channel</span>
+                    <div class="control-group" id="randomnessGroup">
+                        <label for="randomness">Randomness</label>
+                        <input type="range" id="randomness" min="0" max="100" value="30">
+                        <div class="value-display" id="randomnessValue">30%</div>
                     </div>
                 </div>
-                <!-- /Advanced Settings Card -->
+                <!-- /Pattern Settings Card -->
 
-                <!-- Color Settings Card -->
+                <!-- Output & Color Card -->
                 <div class="control-card">
-                    <h3>CMYK Colors</h3>
+                    <h3>Output & Color</h3>
+                    <div class="control-group">
+                        <label for="colorMode">Color Mode</label>
+                        <div class="input-with-button">
+                            <select id="colorMode">
+                                <option value="monochrome">Monochrome (1 Color)</option>
+                                <option value="duotone">Duotone (2 Colors)</option>
+                                <option value="tritone">Tritone (3 Colors)</option>
+                                <option value="cmyk" selected>CMYK (4 Colors)</option>
+                            </select>
+                            <button id="paletteBtn" class="harmonize-btn" title="Generate a new color palette">🎨</button>
+                        </div>
+                    </div>
+                    <div class="color-header">
+                        <h4 id="color-card-title">CMYK Colors</h4>
+                    </div>
                     <div class="color-controls">
-                        <div class="color-input-group">
-                            <label for="cyanColor">Cyan</label>
+                        <div class="color-input-group" id="color-group-cyan">
+                            <label for="cyanColor" id="color-label-cyan">Cyan</label>
                             <input type="color" id="cyanColor" value="#00FFFF">
                         </div>
-                        <div class="color-input-group">
-                            <label for="magentaColor">Magenta</label>
+                        <div class="color-input-group" id="color-group-magenta">
+                            <label for="magentaColor" id="color-label-magenta">Magenta</label>
                             <input type="color" id="magentaColor" value="#FF00FF">
                         </div>
-                        <div class="color-input-group">
-                            <label for="yellowColor">Yellow</label>
+                        <div class="color-input-group" id="color-group-yellow">
+                            <label for="yellowColor" id="color-label-yellow">Yellow</label>
                             <input type="color" id="yellowColor" value="#FFFF00">
                         </div>
-                        <div class="color-input-group">
-                            <label for="blackColor">Black</label>
+                        <div class="color-input-group" id="color-group-black">
+                            <label for="blackColor" id="color-label-black">Black</label>
                             <input type="color" id="blackColor" value="#000000">
                         </div>
                     </div>
                 </div>
-                <!-- /Color Settings Card -->
+                <!-- /Output & Color Card -->
+
+                <!-- Advanced Settings Card -->
+                <div class="control-card">
+                    <h3>Advanced Settings</h3>
+                    <div class="control-group">
+                        <label>Render Style</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="renderStyle" value="fill" checked> Fill Shapes</label>
+                            <label><input type="radio" name="renderStyle" value="stroke"> Stroke Outlines</label>
+                        </div>
+                    </div>
+                    <div class="control-group" id="strokeWidthGroup">
+                        <label for="strokeWidth">Stroke Width</label>
+                        <input type="range" id="strokeWidth" min="0.5" max="5" value="1" step="0.1">
+                        <div class="value-display" id="strokeWidthValue">1.0px</div>
+                    </div>
+                    <div class="control-group checkbox-group">
+                        <label for="angleOffset">
+                            <input type="checkbox" id="angleOffset" checked>
+                            <span class="checkmark"></span>
+                            Use Standard Screen Angles
+                        </label>
+                        <span class="help-text">Reduces moiré patterns by rotating channels</span>
+                    </div>
+                    <div class="control-group" id="lineAngleGroup">
+                        <label for="lineAngle">Line Angle</label>
+                        <input type="range" id="lineAngle" min="0" max="180" value="45">
+                        <div class="value-display" id="lineAngleValue">45°</div>
+                    </div>
+                </div>
+                <!-- /Advanced Settings Card -->
             </div>
 
             <div class="process-section">
@@ -199,18 +226,13 @@
     <!-- /Main Content Area -->
 
     <!-- =================================================================
-    Hidden Canvases for Processing
+    Hidden Canvases for Processing are now created dynamically by JS
     ================================================================== -->
-    <div style="display: none;">
-        <canvas id="cyanCanvas"></canvas>
-        <canvas id="magentaCanvas"></canvas>
-        <canvas id="yellowCanvas"></canvas>
-        <canvas id="blackCanvas"></canvas>
-    </div>
 
 </div>
 
 <!-- JavaScript Files -->
+<script src="js/colorManager.js"></script>
 <script src="js/colorUtils.js"></script>
 <script src="js/advancedPatterns.js"></script>
 <script src="js/halftonePatterns.js"></script>

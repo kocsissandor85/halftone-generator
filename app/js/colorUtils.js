@@ -1,7 +1,7 @@
 /**
  * @file This file contains utility functions for color conversions,
  * specifically for converting from the screen-based RGB color model
- * to the print-based CMYK color model.
+ * to the print-based CMYK color model or other multi-tone separations.
  */
 
 /**
@@ -48,6 +48,68 @@ function rgbToCmyk(data, width, height, contrast = 100) {
   }
 
   return { c, m, y, k };
+}
+
+/**
+ * Converts image data from RGB to a single grayscale channel.
+ * @param {Uint8ClampedArray} data - The flat array of pixel data [R,G,B,A,...].
+ * @param {number} contrast - A contrast adjustment factor (50-200).
+ * @returns {number[]} An array of intensity values (0-1), where 1 is dark.
+ */
+function rgbToGrayscale(data, contrast) {
+  const gray = [];
+  const contrastFactor = contrast / 100.0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    let r = data[i] / 255;
+    let g = data[i + 1] / 255;
+    let b = data[i + 2] / 255;
+
+    // Apply contrast
+    r = Math.max(0, Math.min(1, (r - 0.5) * contrastFactor + 0.5));
+    g = Math.max(0, Math.min(1, (g - 0.5) * contrastFactor + 0.5));
+    b = Math.max(0, Math.min(1, (b - 0.5) * contrastFactor + 0.5));
+
+    // Standard luminance calculation
+    const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+    // Invert luminance so that 1.0 is black and 0.0 is white.
+    gray.push(1.0 - luminance);
+  }
+  return gray;
+}
+
+/**
+ * Separates an image into 2 (duotone) or 3 (tritone) intensity channels based on luminance.
+ * This allows for mapping shadows, midtones, and highlights to different colors.
+ * @param {Uint8ClampedArray} data - The flat array of pixel data [R,G,B,A,...].
+ * @param {number} numTones - The number of channels to create (2 or 3).
+ * @param {number} contrast - A contrast adjustment factor (50-200).
+ * @returns {Object.<string, number[]>} An object containing the separated tone channels, e.g., { tone1: [...], tone2: [...] }.
+ */
+function rgbToMultiTone(data, numTones, contrast) {
+  const channels = {};
+  for (let i = 1; i <= numTones; i++) {
+    channels[`tone${i}`] = [];
+  }
+
+  const grayscale = rgbToGrayscale(data, contrast); // Note: rgbToGrayscale inverts luminance.
+
+  for (let i = 0; i < grayscale.length; i++) {
+    const intensity = grayscale[i]; // 0=white, 1=black
+
+    if (numTones === 2) { // Duotone
+      // Tone 1 for darks, Tone 2 for lights.
+      channels.tone1.push(Math.sqrt(intensity));
+      channels.tone2.push(1.0 - Math.sqrt(1.0 - intensity));
+    } else if (numTones === 3) { // Tritone
+      // Tone 1 for darks, Tone 2 for midtones, Tone 3 for lights
+      const mid = Math.sin(intensity * Math.PI); // Peaks in the middle (intensity=0.5)
+      channels.tone1.push(intensity);          // Strongest in darks
+      channels.tone2.push(mid);                // Strongest in midtones
+      channels.tone3.push(1.0 - intensity);    // Strongest in lights
+    }
+  }
+  return channels;
 }
 
 /**
