@@ -1,6 +1,6 @@
 /**
  * Advanced pattern generators for enhanced halftone effects
- * (REFACTORED so that grid-based patterns draw single elements, allowing for rotation)
+ * (FIXED: Voronoi now supports rotation. REMOVED: Fractal pattern.)
  */
 
 class AdvancedPatterns {
@@ -13,6 +13,84 @@ class AdvancedPatterns {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
+  }
+
+  /**
+   * --- FIXED: Generate Voronoi cell pattern with rotation support ---
+   */
+  generateVoronoiPattern(ctx, values, width, height, config) {
+    const { dotSize, spacing, angle } = config;
+    let svg = '';
+
+    const angleRad = (angle * Math.PI) / 180;
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+    const diagonal = Math.sqrt(width * width + height * height);
+
+    const points = [];
+    const gridSpacing = spacing * 1.5;
+
+    for (let yGrid = -diagonal / 2; yGrid < diagonal / 2; yGrid += gridSpacing) {
+      for (let xGrid = -diagonal / 2; xGrid < diagonal / 2; xGrid += gridSpacing) {
+        // Add some randomness to avoid perfect grid
+        const jitterX = (this.seedRandom() - 0.5) * spacing * 0.5;
+        const jitterY = (this.seedRandom() - 0.5) * spacing * 0.5;
+
+        // Apply rotation to the seed point location
+        const rotX = (xGrid + jitterX) * cosA - (yGrid + jitterY) * sinA + width / 2;
+        const rotY = (xGrid + jitterX) * sinA + (yGrid + jitterY) * cosA + height / 2;
+
+        points.push({
+          x: rotX,
+          y: rotY,
+          id: points.length
+        });
+      }
+    }
+
+    // For each point, create a cell based on local intensity
+    points.forEach(point => {
+      if (point.x >= 0 && point.x < width && point.y >= 0 && point.y < height) {
+        const pixelX = Math.floor(point.x);
+        const pixelY = Math.floor(point.y);
+        const idx = pixelY * width + pixelX;
+        const intensity = values[idx] || 0;
+
+        if (intensity > 0.05) {
+          const numSides = 6;
+          const baseRadius = dotSize * intensity;
+          let points_str = '';
+
+          for (let i = 0; i < numSides; i++) {
+            const angle = (i / numSides) * Math.PI * 2;
+            const radiusVariation = 0.7 + this.seedRandom() * 0.6;
+            const radius = baseRadius * radiusVariation;
+
+            const x = point.x + Math.cos(angle) * radius;
+            const y = point.y + Math.sin(angle) * radius;
+            points_str += `${x.toFixed(2)},${y.toFixed(2)} `;
+          }
+
+          // Draw on canvas
+          ctx.beginPath();
+          const firstPoint = points_str.split(' ')[0].split(',');
+          ctx.moveTo(parseFloat(firstPoint[0]), parseFloat(firstPoint[1]));
+
+          points_str.trim().split(' ').slice(1).forEach(pointStr => {
+            if (pointStr) {
+              const [x, y] = pointStr.split(',');
+              ctx.lineTo(parseFloat(x), parseFloat(y));
+            }
+          });
+          ctx.closePath();
+          ctx.fill();
+
+          svg += `<polygon points="${points_str.trim()}"/>`;
+        }
+      }
+    });
+
+    return svg;
   }
 
   // --- REFACTORED: Draws a single concentric circle at given coordinates ---
@@ -113,15 +191,17 @@ class AdvancedPatterns {
     return '';
   }
 
-  // --- REFACTORED: Draws a single flow-field line at given coordinates ---
+  /**
+   * --- FIXED: Draw single flow-field line. Now receives pre-calculated gradients. ---
+   */
   drawFlowField(ctx, x, y, intensity, config, gradients, width) {
-    // Note: This pattern is a bit different as it needs pre-calculated gradients
     const { dotSize } = config;
     if (intensity > 0.1 && gradients) {
       const idx = Math.floor(y) * width + Math.floor(x);
-      const gradient = gradients[idx];
-      if(!gradient) return '';
+      // Ensure gradient exists for this index
+      if (!gradients[idx]) return '';
 
+      const gradient = gradients[idx];
       const flowLength = dotSize * intensity * 2;
       const endX = x + gradient.x * flowLength;
       const endY = y + gradient.y * flowLength;
@@ -137,124 +217,11 @@ class AdvancedPatterns {
       ctx.arc(x, y, lineWidth, 0, Math.PI * 2);
       ctx.fill();
 
-      return `<line x1="${x}" y1="${y}" x2="${endX.toFixed(2)}" y2="${endY.toFixed(2)}" stroke-width="${lineWidth.toFixed(2)}" stroke="currentColor"/><circle cx="${x}" cy="${y}" r="${lineWidth.toFixed(2)}"/>`;
+      let lineSVG = `<line x1="${x.toFixed(2)}" y1="${y.toFixed(2)}" x2="${endX.toFixed(2)}" y2="${endY.toFixed(2)}" stroke-width="${lineWidth.toFixed(2)}" stroke="currentColor"/>`;
+      let circleSVG = `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${lineWidth.toFixed(2)}"/>`;
+      return lineSVG + circleSVG;
     }
     return '';
-  }
-
-  generateVoronoiPattern(ctx, values, width, height, config) {
-    const { dotSize, spacing } = config;
-    let svg = '';
-    const points = [];
-    const gridSpacing = spacing * 1.5;
-    for (let y = 0; y < height + gridSpacing; y += gridSpacing) {
-      for (let x = 0; x < width + gridSpacing; x += gridSpacing) {
-        const jitterX = (this.seedRandom() - 0.5) * spacing * 0.5;
-        const jitterY = (this.seedRandom() - 0.5) * spacing * 0.5;
-        points.push({ x: x + jitterX, y: y + jitterY, id: points.length });
-      }
-    }
-    points.forEach(point => {
-      if (point.x >= 0 && point.x < width && point.y >= 0 && point.y < height) {
-        const pixelX = Math.floor(point.x);
-        const pixelY = Math.floor(point.y);
-        const idx = pixelY * width + pixelX;
-        const intensity = values[idx] || 0;
-        if (intensity > 0.05) {
-          const numSides = 6;
-          const baseRadius = dotSize * intensity;
-          let points_str = '';
-          for (let i = 0; i < numSides; i++) {
-            const angle = (i / numSides) * Math.PI * 2;
-            const radiusVariation = 0.7 + this.seedRandom() * 0.6;
-            const radius = baseRadius * radiusVariation;
-            const x = point.x + Math.cos(angle) * radius;
-            const y = point.y + Math.sin(angle) * radius;
-            points_str += `${x.toFixed(2)},${y.toFixed(2)} `;
-          }
-          ctx.beginPath();
-          const firstPoint = points_str.split(' ')[0].split(',');
-          ctx.moveTo(parseFloat(firstPoint[0]), parseFloat(firstPoint[1]));
-          points_str.trim().split(' ').slice(1).forEach(pointStr => {
-            if (pointStr) {
-              const [x, y] = pointStr.split(',');
-              ctx.lineTo(parseFloat(x), parseFloat(y));
-            }
-          });
-          ctx.closePath();
-          ctx.fill();
-          svg += `<polygon points="${points_str.trim()}"/>`;
-        }
-      }
-    });
-    return svg;
-  }
-
-  /**
-   * Generate fractal pattern (simplified Sierpinski-like)
-   */
-  generateFractalPattern(ctx, values, width, height, config) {
-    const { dotSize, spacing } = config;
-    let svg = '';
-
-    // Generate fractal points using chaos game method
-    const iterations = Math.floor((width * height) / (spacing * spacing));
-
-    // Initial triangle vertices
-    const vertices = [
-      { x: width * 0.5, y: height * 0.1 },
-      { x: width * 0.1, y: height * 0.9 },
-      { x: width * 0.9, y: height * 0.9 }
-    ];
-
-    let currentX = width * 0.5;
-    let currentY = height * 0.5;
-
-    for (let i = 0; i < iterations; i++) {
-      // Choose random vertex
-      const vertex = vertices[Math.floor(this.seedRandom() * 3)];
-
-      // Move halfway to chosen vertex
-      currentX = (currentX + vertex.x) / 2;
-      currentY = (currentY + vertex.y) / 2;
-
-      // Sample intensity at this point
-      if (currentX >= 0 && currentX < width && currentY >= 0 && currentY < height) {
-        const pixelX = Math.floor(currentX);
-        const pixelY = Math.floor(currentY);
-        const idx = pixelY * width + pixelX;
-        const intensity = values[idx] || 0;
-
-        if (intensity > 0.1) {
-          const dotRadius = Math.max(0.5, dotSize * intensity * 0.5);
-
-          // Canvas drawing
-          ctx.beginPath();
-          ctx.arc(currentX, currentY, dotRadius, 0, Math.PI * 2);
-          ctx.fill();
-
-          svg += `<circle cx="${currentX.toFixed(2)}" cy="${currentY.toFixed(2)}" r="${dotRadius.toFixed(2)}"/>`;
-        }
-      }
-    }
-
-    return svg;
-  }
-
-  /**
-   * Generate flow field pattern (dots follow image gradients)
-   */
-  generateFlowFieldPattern(ctx, values, width, height, config) {
-    const { dotSize, spacing } = config;
-    let svg = '';
-
-    // Calculate gradient field
-    const gradients = this.calculateGradientField(values, width, height);
-    // Bind the single-draw function with the pre-calculated gradients
-    const coreDrawFn = (ctx, x, y, intensity, config) => this.drawFlowField(ctx, x, y, intensity, config, gradients, width);
-    // This pattern type is now handled via the main switch in halftonePatterns.js
-    // This function is kept for its gradient calculation logic
-    return svg;
   }
 
   /**

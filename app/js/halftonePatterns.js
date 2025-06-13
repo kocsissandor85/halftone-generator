@@ -98,8 +98,21 @@ class HalftonePatterns {
       case 'wave':
         svg += this.applyRotatedGrid(ctx, values, width, height, config, this.advancedPatterns.drawWave.bind(this.advancedPatterns));
         break;
+
+      // --- FIXED: Flow Field Logic ---
       case 'flowfield':
-        svg += this.applyRotatedGrid(ctx, values, width, height, config, this.advancedPatterns.drawFlowField.bind(this.advancedPatterns));
+        // Pre-calculate the gradient map first
+        const gradients = this.advancedPatterns.calculateGradientField(values, width, height);
+        // Create a drawing function that has access to the gradients
+        const drawFnWithGradients = (ctx, x, y, intensity, config) => {
+          return this.advancedPatterns.drawFlowField(ctx, x, y, intensity, config, gradients, width);
+        };
+        svg += this.applyRotatedGrid(ctx, values, width, height, config, drawFnWithGradients);
+        break;
+
+      // --- FIXED: Voronoi now has its own call to handle rotation internally ---
+      case 'voronoi':
+        svg += this.advancedPatterns.generateVoronoiPattern(ctx, values, width, height, config);
         break;
 
       // Patterns with their own unique logic (rotation not applicable or already included)
@@ -110,18 +123,12 @@ class HalftonePatterns {
         svg += this.generateCrosshatchPattern(ctx, values, width, height, config);
         break;
 
-      // Non-grid patterns left untouched as requested
+      // Non-grid patterns left untouched
       case 'stochastic':
         svg += this.generateStochasticPattern(ctx, values, width, height, config);
         break;
       case 'stipple':
         svg += this.generateStipplePattern(ctx, values, width, height, config);
-        break;
-      case 'voronoi':
-        svg += this.advancedPatterns.generateVoronoiPattern(ctx, values, width, height, config);
-        break;
-      case 'fractal':
-        svg += this.advancedPatterns.generateFractalPattern(ctx, values, width, height, config);
         break;
 
       default:
