@@ -5,129 +5,195 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced Color Halftone Plotter Tool</title>
     <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-<div class="container">
-    <h1>Advanced Color Halftone Plotter Tool</h1>
-    <p class="subtitle">Upload an image to convert it into color-separated halftone patterns for plotting</p>
-
-    <div class="upload-area" id="uploadArea">
-        <p>Click to upload or drag and drop an image here</p>
-        <p style="color: #999; font-size: 14px;">Supports JPG, PNG, GIF</p>
-    </div>
-    <input type="file" id="fileInput" accept="image/*">
-
-    <div id="controlsSection" class="hidden">
-        <div class="controls">
-            <div class="control-group">
-                <label for="patternType">Pattern Type</label>
-                <select id="patternType">
-                    <optgroup label="Classic Patterns">
-                        <option value="circle">Classic Dots (Original)</option>
-                        <option value="square">Square Dots</option>
-                        <option value="diamond">Diamond Dots</option>
-                        <option value="line">Line Screen</option>
-                        <option value="crosshatch">Crosshatch</option>
-                        <option value="stochastic">Stochastic (Random)</option>
-                        <option value="stipple">Stipple</option>
-                    </optgroup>
-                    <optgroup label="Advanced Patterns">
-                        <option value="voronoi">Voronoi Cells</option>
-                        <option value="concentric">Concentric Circles</option>
-                        <option value="spiral">Spiral</option>
-                        <option value="hexagonal">Hexagonal Grid</option>
-                        <option value="wave">Wave Pattern</option>
-                        <option value="fractal">Fractal (Sierpinski)</option>
-                        <option value="flowfield">Flow Field</option>
-                    </optgroup>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label for="dotSize">Dot/Pattern Size</label>
-                <input type="range" id="dotSize" min="2" max="20" value="8">
-                <div class="value-display" id="dotSizeValue">8px</div>
-            </div>
-
-            <div class="control-group">
-                <label for="spacing">Spacing</label>
-                <input type="range" id="spacing" min="5" max="30" value="12">
-                <div class="value-display" id="spacingValue">12px</div>
-            </div>
-
-            <div class="control-group">
-                <label for="lineAngle">Line Angle (for line patterns)</label>
-                <input type="range" id="lineAngle" min="0" max="180" value="45">
-                <div class="value-display" id="lineAngleValue">45°</div>
-            </div>
-
-            <div class="control-group">
-                <label for="randomness">Randomness (for stochastic)</label>
-                <input type="range" id="randomness" min="0" max="100" value="30">
-                <div class="value-display" id="randomnessValue">30%</div>
-            </div>
-
-            <div class="control-group">
-                <label for="cyanColor">Cyan Color</label>
-                <input type="color" id="cyanColor" value="#00FFFF">
-            </div>
-
-            <div class="control-group">
-                <label for="magentaColor">Magenta Color</label>
-                <input type="color" id="magentaColor" value="#FF00FF">
-            </div>
-
-            <div class="control-group">
-                <label for="yellowColor">Yellow Color</label>
-                <input type="color" id="yellowColor" value="#FFFF00">
-            </div>
-
-            <div class="control-group">
-                <label for="blackColor">Black Color</label>
-                <input type="color" id="blackColor" value="#000000">
-            </div>
-
-            <div class="control-group">
-                <label for="angleOffset">Different Angles Per Channel</label>
-                <input type="checkbox" id="angleOffset" checked>
-                <span style="font-size: 14px; color: #666;">Use traditional CMYK angles</span>
-            </div>
-
-            <div class="control-group">
-                <label for="contrast">Contrast</label>
-                <input type="range" id="contrast" min="50" max="200" value="100">
-                <div class="value-display" id="contrastValue">100%</div>
-            </div>
+<div class="app-container">
+    <!-- Header Section -->
+    <header class="app-header">
+        <div class="header-content">
+            <h1>Advanced Color Halftone Plotter Tool</h1>
+            <p class="subtitle">Transform images into color-separated halftone patterns optimized for plotting devices</p>
         </div>
+    </header>
 
-        <button class="process-btn" id="processBtn">Process Image</button>
-    </div>
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <!-- Upload Section -->
+        <section class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <h3>Upload Your Image</h3>
+                <p>Click to select or drag and drop an image here</p>
+                <span class="upload-hint">Supports JPG, PNG, GIF • Recommended: 1000×1000px or larger</span>
+            </div>
+            <input type="file" id="fileInput" accept="image/*">
+        </section>
 
-    <div id="previewSection" class="hidden">
-        <div class="preview-grid-simple">
-            <div class="preview-item">
-                <h3>Original Image</h3>
-                <canvas id="originalCanvas"></canvas>
+        <!-- Controls Section -->
+        <section id="controlsSection" class="controls-section hidden">
+            <div class="controls-header">
+                <h2>Pattern Configuration</h2>
+                <p>Adjust these settings to customize your halftone output</p>
             </div>
 
-            <div class="preview-item">
-                <h3>Halftone Result</h3>
-                <canvas id="combinedCanvas"></canvas>
-                <div class="download-buttons">
-                    <button class="download-btn primary" onclick="downloadSVG('combined')">Download Combined SVG</button>
-                    <button class="download-btn secondary" onclick="downloadAllChannels()">Download All Channels</button>
-                    <button class="download-btn secondary" onclick="downloadHPGL('combined')">Download HPGL</button>
+            <div class="controls-grid">
+                <!-- Pattern Settings -->
+                <div class="control-card">
+                    <h3>Pattern Settings</h3>
+                    <div class="control-group">
+                        <label for="patternType">Pattern Type</label>
+                        <select id="patternType">
+                            <optgroup label="Classic Patterns">
+                                <option value="circle">Classic Dots (Original)</option>
+                                <option value="square">Square Dots</option>
+                                <option value="diamond">Diamond Dots</option>
+                                <option value="line">Line Screen</option>
+                                <option value="crosshatch">Crosshatch</option>
+                                <option value="stochastic">Stochastic (Random)</option>
+                                <option value="stipple">Stipple</option>
+                            </optgroup>
+                            <optgroup label="Advanced Patterns">
+                                <option value="voronoi">Voronoi Cells</option>
+                                <option value="concentric">Concentric Circles</option>
+                                <option value="spiral">Spiral</option>
+                                <option value="hexagonal">Hexagonal Grid</option>
+                                <option value="wave">Wave Pattern</option>
+                                <option value="fractal">Fractal (Sierpinski)</option>
+                                <option value="flowfield">Flow Field</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="dotSize">Pattern Size</label>
+                        <input type="range" id="dotSize" min="2" max="20" value="8">
+                        <div class="value-display" id="dotSizeValue">8px</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="spacing">Spacing</label>
+                        <input type="range" id="spacing" min="5" max="30" value="12">
+                        <div class="value-display" id="spacingValue">12px</div>
+                    </div>
+                </div>
+
+                <!-- Advanced Settings -->
+                <div class="control-card">
+                    <h3>Advanced Settings</h3>
+                    <div class="control-group">
+                        <label for="lineAngle">Line Angle</label>
+                        <input type="range" id="lineAngle" min="0" max="180" value="45">
+                        <div class="value-display" id="lineAngleValue">45°</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="randomness">Randomness</label>
+                        <input type="range" id="randomness" min="0" max="100" value="30">
+                        <div class="value-display" id="randomnessValue">30%</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="contrast">Contrast</label>
+                        <input type="range" id="contrast" min="50" max="200" value="100">
+                        <div class="value-display" id="contrastValue">100%</div>
+                    </div>
+
+                    <div class="control-group checkbox-group">
+                        <label for="angleOffset">
+                            <input type="checkbox" id="angleOffset" checked>
+                            <span class="checkmark"></span>
+                            Use Traditional CMYK Angles
+                        </label>
+                        <span class="help-text">Applies industry-standard screen angles per channel</span>
+                    </div>
+                </div>
+
+                <!-- Color Settings -->
+                <div class="control-card">
+                    <h3>CMYK Colors</h3>
+                    <div class="color-controls">
+                        <div class="color-input-group">
+                            <label for="cyanColor">Cyan</label>
+                            <input type="color" id="cyanColor" value="#00FFFF">
+                        </div>
+                        <div class="color-input-group">
+                            <label for="magentaColor">Magenta</label>
+                            <input type="color" id="magentaColor" value="#FF00FF">
+                        </div>
+                        <div class="color-input-group">
+                            <label for="yellowColor">Yellow</label>
+                            <input type="color" id="yellowColor" value="#FFFF00">
+                        </div>
+                        <div class="color-input-group">
+                            <label for="blackColor">Black</label>
+                            <input type="color" id="blackColor" value="#000000">
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Hidden canvases for processing -->
-        <div style="display: none;">
-            <canvas id="cyanCanvas"></canvas>
-            <canvas id="magentaCanvas"></canvas>
-            <canvas id="yellowCanvas"></canvas>
-            <canvas id="blackCanvas"></canvas>
-        </div>
+            <div class="process-section">
+                <button class="process-btn" id="processBtn">
+                    <span class="btn-icon">⚡</span>
+                    Process Image
+                </button>
+            </div>
+        </section>
+
+        <!-- Preview Section -->
+        <section id="previewSection" class="preview-section hidden">
+            <div class="preview-header">
+                <h2>Preview Results</h2>
+                <p>Compare your original image with the generated halftone pattern</p>
+            </div>
+
+            <div class="preview-grid">
+                <div class="preview-card">
+                    <div class="preview-header-card">
+                        <h3>Original Image</h3>
+                        <span class="preview-badge original">Source</span>
+                    </div>
+                    <div class="canvas-container">
+                        <canvas id="originalCanvas"></canvas>
+                    </div>
+                </div>
+
+                <div class="preview-card">
+                    <div class="preview-header-card">
+                        <h3>Halftone Result</h3>
+                        <span class="preview-badge result">Generated</span>
+                    </div>
+                    <div class="canvas-container">
+                        <canvas id="combinedCanvas"></canvas>
+                    </div>
+                    <div class="download-section">
+                        <button class="download-btn primary" onclick="downloadSVG('combined')">
+                            <span class="btn-icon">💾</span>
+                            Download Combined SVG
+                        </button>
+                        <div class="download-secondary">
+                            <button class="download-btn secondary" onclick="downloadAllChannels()">
+                                <span class="btn-icon">📦</span>
+                                All Channels
+                            </button>
+                            <button class="download-btn secondary" onclick="downloadHPGL('combined')">
+                                <span class="btn-icon">🖨️</span>
+                                HPGL
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Hidden canvases for processing -->
+    <div style="display: none;">
+        <canvas id="cyanCanvas"></canvas>
+        <canvas id="magentaCanvas"></canvas>
+        <canvas id="yellowCanvas"></canvas>
+        <canvas id="blackCanvas"></canvas>
     </div>
 </div>
 

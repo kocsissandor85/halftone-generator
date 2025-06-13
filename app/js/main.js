@@ -63,12 +63,12 @@ class HalftoneApp {
     // Show/hide controls based on pattern type
     if (lineAngleGroup) {
       const showLineAngle = ['line', 'crosshatch', 'wave'].includes(patternType);
-      lineAngleGroup.style.display = showLineAngle ? 'flex' : 'none';
+      lineAngleGroup.style.display = showLineAngle ? 'block' : 'none';
     }
 
     if (randomnessGroup) {
       const showRandomness = ['stochastic', 'stipple', 'voronoi'].includes(patternType);
-      randomnessGroup.style.display = showRandomness ? 'flex' : 'none';
+      randomnessGroup.style.display = showRandomness ? 'block' : 'none';
     }
 
     // Add pattern-specific tips
