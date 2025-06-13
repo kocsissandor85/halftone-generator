@@ -313,12 +313,24 @@ option {
   font-weight: 500;
   margin-bottom: 0;
 }
+
+.input-with-button {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-with-button select {
+  flex-grow: 1;
+}
+
 .harmonize-btn {
   background: #e9ecef;
   border: 1px solid #dee2e6;
   border-radius: 6px;
   color: #495057;
   cursor: pointer;
+  flex-shrink: 0;
   font-size: 1.2rem;
   line-height: 1;
   padding: 0.5rem;
@@ -328,6 +340,99 @@ option {
   background: #dee2e6;
   border-color: #adb5bd;
   transform: scale(1.1);
+}
+
+/* Radio & Checkbox & Segmented Control */
+.radio-group label,
+.checkbox-group label {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-weight: 500;
+}
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+input[type="checkbox"] {
+  display: none;
+}
+
+.checkmark {
+  border: 2px solid #e9ecef;
+  border-radius: 4px;
+  height: 20px;
+  margin-right: 0.75rem;
+  position: relative;
+  transition: all 0.3s ease;
+  width: 20px;
+}
+
+.checkmark::after {
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  content: '';
+  height: 10px;
+  left: 6px;
+  opacity: 0;
+  position: absolute;
+  top: 2px;
+  transform: rotate(45deg);
+  transition: opacity 0.3s ease;
+  width: 6px;
+}
+
+input[type="checkbox"]:checked + .checkmark {
+  background: #667eea;
+  border-color: #667eea;
+}
+
+input[type="checkbox"]:checked + .checkmark::after {
+  opacity: 1;
+}
+
+.help-text {
+  color: #999;
+  font-size: 0.85rem;
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+.segmented-control {
+  background-color: #e9ecef;
+  border-radius: 8px;
+  display: flex;
+  padding: 4px;
+  width: 100%;
+}
+.segmented-control label {
+  flex: 1;
+  position: relative;
+  margin-bottom: 0;
+}
+.segmented-control input[type="radio"] {
+  display: none;
+}
+.segmented-control span {
+  align-items: center;
+  border-radius: 6px;
+  color: #495057;
+  cursor: pointer;
+  display: flex;
+  font-weight: 500;
+  height: 100%;
+  justify-content: center;
+  padding: 0.5rem;
+  text-align: center;
+  transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+  width: 100%;
+}
+.segmented-control input[type="radio"]:checked + span {
+  background-color: white;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  color: #667eea;
 }
 
 .input-with-button {
@@ -431,6 +536,54 @@ input[type="checkbox"]:checked + .checkmark::after {
   font-size: 0.85rem;
   font-weight: 400;
   margin-left: 2px;
+}
+
+#customAnglesGroup {
+  background-color: rgba(102, 126, 234, 0.05);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.5rem 1rem;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.angle-input-group {
+  margin-bottom: 0.5rem;
+}
+
+.angle-input-group label {
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.angle-value-display {
+  margin-top: 0.5rem;
+}
+
+/*.angle-input {*/
+/*  -moz-appearance: textfield;*/
+/*  appearance: textfield;*/
+/*  background: white;*/
+/*  border: 2px solid #e9ecef;*/
+/*  border-radius: 6px;*/
+/*  font-size: 0.95rem;*/
+/*  padding: 0.5rem;*/
+/*  transition: all 0.3s ease;*/
+/*  width: 100%;*/
+/*}*/
+
+.angle-input::-webkit-inner-spin-button,
+.angle-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.angle-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  outline: none;
 }
 
 /* =================================================================
@@ -763,7 +916,7 @@ canvas {
    Utility Classes & Accessibility
    ================================================================= */
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 input:focus,

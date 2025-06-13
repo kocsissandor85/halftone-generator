@@ -68,28 +68,36 @@ class HalftoneApp {
    * Sets up event listeners for all the control inputs (sliders, dropdowns).
    */
   setupControlListeners() {
-    const controls = [
+    const valueDisplayControls = [
       { id: 'dotSize',    display: 'dotSizeValue',    suffix: 'px' },
       { id: 'spacing',    display: 'spacingValue',    suffix: 'px' },
       { id: 'lineAngle',  display: 'lineAngleValue',  suffix: '°' },
       { id: 'randomness', display: 'randomnessValue', suffix: '%' },
       { id: 'contrast',   display: 'contrastValue',   suffix: '%' },
-      { id: 'strokeWidth', display: 'strokeWidthValue', suffix: 'px', fixed: 1 }
+      { id: 'strokeWidth', display: 'strokeWidthValue', suffix: 'px', fixed: 1 },
+      // Add new angle sliders here
+      { id: 'angleCyan',    display: 'angleCyanValue',    suffix: '°' },
+      { id: 'angleMagenta', display: 'angleMagentaValue', suffix: '°' },
+      { id: 'angleYellow',  display: 'angleYellowValue',  suffix: '°' },
+      { id: 'angleBlack',   display: 'angleBlackValue',   suffix: '°' }
     ];
 
-    controls.forEach(control => {
+    valueDisplayControls.forEach(control => {
       const element = document.getElementById(control.id);
       const display = document.getElementById(control.display);
       if (element && display) {
-        element.addEventListener('input', (e) => {
+        const updateDisplay = (e) => {
           const value = control.fixed ? parseFloat(e.target.value).toFixed(control.fixed) : e.target.value;
           display.textContent = value + control.suffix;
-        });
+        };
+        element.addEventListener('input', updateDisplay);
+        // Set initial display text
+        display.textContent = (control.fixed ? parseFloat(element.value).toFixed(control.fixed) : element.value) + control.suffix;
       }
     });
 
     // Listeners for controls that affect UI visibility
-    const uiAffectingControls = ['patternType', 'colorMode'];
+    const uiAffectingControls = ['patternType', 'colorMode', 'angleOffset'];
     uiAffectingControls.forEach(id => {
       document.getElementById(id).addEventListener('change', this.updateUIForCurrentSettings.bind(this));
     });
@@ -97,8 +105,9 @@ class HalftoneApp {
       radio.addEventListener('change', this.updateUIForCurrentSettings.bind(this));
     });
 
-    // Listener for palette generator
+    // Listener for palette and color buttons
     document.getElementById('paletteBtn').addEventListener('click', this.applyHarmoniousPalette.bind(this));
+    document.getElementById('resetColorsBtn').addEventListener('click', this.resetDefaultColors.bind(this));
   }
 
   /**
@@ -108,6 +117,7 @@ class HalftoneApp {
     const patternType = document.getElementById('patternType').value;
     const colorMode = document.getElementById('colorMode').value;
     const renderStyle = document.querySelector('input[name="renderStyle"]:checked').value;
+    const useStandardAngles = document.getElementById('angleOffset').checked;
 
     // 1. Update pattern-specific controls
     const lineAngleGroup = document.getElementById('lineAngle').closest('.control-group');
@@ -128,12 +138,12 @@ class HalftoneApp {
       cmyk: ['Cyan', 'Magenta', 'Yellow', 'Black']
     };
 
-    const channelIds = ['cyan', 'magenta', 'yellow', 'black'];
+    const uiChannelIds = ['cyan', 'magenta', 'yellow', 'black'];
 
     document.getElementById('color-card-title').textContent = `${colorMode.charAt(0).toUpperCase() + colorMode.slice(1)} Colors`;
 
     for (let i = 0; i < 4; i++) {
-      const channelId = channelIds[i];
+      const channelId = uiChannelIds[i];
       const group = document.getElementById(`color-group-${channelId}`);
       const label = document.getElementById(`color-label-${channelId}`);
       if (i < numChannels) {
@@ -141,6 +151,33 @@ class HalftoneApp {
         label.textContent = colorLabels[colorMode][i];
       } else {
         group.style.display = 'none';
+      }
+    }
+
+    // 4. Update custom angle controls
+    const customAnglesGroup = document.getElementById('customAnglesGroup');
+    customAnglesGroup.classList.toggle('hidden', useStandardAngles);
+
+    if (!useStandardAngles) {
+      const angleLabels = {
+        monochrome: ['Key Angle'],
+        duotone: ['Tone 1 Angle', 'Tone 2 Angle'],
+        tritone: ['Shadows Angle', 'Midtones Angle', 'Highlights Angle'],
+        cmyk: ['Cyan Angle', 'Magenta Angle', 'Yellow Angle', 'Black Angle']
+      };
+
+      for (let i = 0; i < 4; i++) {
+        const angleGroupId = `angle-group-${uiChannelIds[i]}`;
+        const angleLabelId = `angle-label-${uiChannelIds[i]}`;
+        const group = document.getElementById(angleGroupId);
+        const label = document.getElementById(angleLabelId);
+
+        if (i < numChannels) {
+          group.style.display = 'block';
+          label.textContent = angleLabels[colorMode][i];
+        } else {
+          group.style.display = 'none';
+        }
       }
     }
   }
@@ -165,7 +202,21 @@ class HalftoneApp {
       document.getElementById(`${uiChannelIds[i]}Color`).value = palette[i];
     }
 
-    // If an image has already been uploaded and processed, re-process with new colors.
+    // If an image has already been processed, re-process with new colors.
+    if (this.uploadedImage && !document.getElementById('previewSection').classList.contains('hidden')) {
+      this.processImage();
+    }
+  }
+
+  /**
+   * Resets the color pickers to the default CMYK values.
+   */
+  resetDefaultColors() {
+    document.getElementById('cyanColor').value = '#00ffff';
+    document.getElementById('magentaColor').value = '#ff00ff';
+    document.getElementById('yellowColor').value = '#ffff00';
+    document.getElementById('blackColor').value = '#000000';
+
     if (this.uploadedImage && !document.getElementById('previewSection').classList.contains('hidden')) {
       this.processImage();
     }
@@ -294,6 +345,27 @@ class HalftoneApp {
       channelNames.push(genericName);
     }
 
+    // Determine angles
+    const useAngleOffset = document.getElementById('angleOffset').checked;
+    let angles;
+    if (useAngleOffset) {
+      const standardAngles = this.patterns.getStandardAngles();
+      const modeAngles = {
+        monochrome: { key: 45 },
+        duotone: { tone1: 75, tone2: 15 },
+        tritone: { shadows: 75, midtones: 15, highlights: 0 },
+        cmyk: standardAngles
+      };
+      angles = modeAngles[colorMode];
+    } else {
+      angles = {};
+      const uiAngleIds = ['angleCyan', 'angleMagenta', 'angleYellow', 'angleBlack'];
+      channelNames.forEach((name, i) => {
+        const inputId = uiAngleIds[i];
+        angles[name] = parseInt(document.getElementById(inputId).value, 10) || 0;
+      });
+    }
+
     return {
       patternType: document.getElementById('patternType').value,
       dotSize: parseInt(document.getElementById('dotSize').value, 10),
@@ -301,12 +373,12 @@ class HalftoneApp {
       lineAngle: parseInt(document.getElementById('lineAngle').value, 10),
       randomness: parseInt(document.getElementById('randomness').value, 10),
       contrast: parseInt(document.getElementById('contrast').value, 10),
-      useAngleOffset: document.getElementById('angleOffset').checked,
       colorMode: colorMode,
       renderStyle: document.querySelector('input[name="renderStyle"]:checked').value,
       strokeWidth: parseFloat(document.getElementById('strokeWidth').value),
       colors: colors,
-      channelNames: channelNames
+      channelNames: channelNames,
+      angles: angles
     };
   }
 
@@ -355,16 +427,7 @@ class HalftoneApp {
             break;
         }
 
-        const standardAngles = this.patterns.getStandardAngles();
-        const modeAngles = {
-          monochrome: { key: 45 },
-          duotone: { tone1: 75, tone2: 15 },
-          tritone: { shadows: 75, midtones: 15, highlights: 0 },
-          cmyk: standardAngles
-        };
-        const angles = config.useAngleOffset ? modeAngles[config.colorMode] : {};
-
-        this.generateChannelHalftones(channelData, angles, config);
+        this.generateChannelHalftones(channelData, config);
         this.generateCombinedPreview(config.channelNames, config.colors);
         this.logAndDisplayProcessingStats(config.channelNames);
 
@@ -427,10 +490,9 @@ class HalftoneApp {
   /**
    * Generates the halftone pattern for each color channel individually.
    * @param {Object.<string, number[]>} channelData - The separated channel data.
-   * @param {object} angles - The screen angles for each channel.
    * @param {object} config - The main processing configuration.
    */
-  generateChannelHalftones(channelData, angles, config) {
+  generateChannelHalftones(channelData, config) {
     const channelNames = Object.keys(channelData);
 
     channelNames.forEach(channel => {
@@ -442,7 +504,12 @@ class HalftoneApp {
         document.body.appendChild(canvas);
       }
 
-      const channelConfig = { ...config, angle: angles[channel] || 0, color: config.colors[channel] };
+      const channelConfig = {
+        ...config,
+        angle: config.angles[channel] || 0,
+        color: config.colors[channel]
+      };
+
       const svg = this.patterns.generatePattern(
         config.patternType,
         channel,
