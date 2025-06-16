@@ -1,11 +1,10 @@
 /**
- * @file Manages the creation, optimization, and exporting of SVG and HPGL files.
- * This module handles generating layered SVGs for CMYK channels and converting
- * vector data into plotter-friendly HPGL code.
+ * @file Manages the creation, optimization, and exporting of SVG files.
+ * This module handles generating layered SVGs for color separated channels.
  */
 
 /**
- * A class to handle all SVG and HPGL export-related functionalities.
+ * A class to handle all SVG export-related functionalities.
  * It stores SVG data for each channel, generates combined views,
  * optimizes the output, and provides download methods.
  */
@@ -102,19 +101,18 @@ class SVGExporter {
     channels.forEach(channel => {
       const channelSvg = this.svgData[channel];
       if (channelSvg) {
+        // Extract only the inner <g> content from the worker-generated SVG
+        const gMatch = channelSvg.match(/<g[^>]*>(.*?)<\/g>/s);
+        const elements = gMatch ? gMatch[1] : '';
+
         svg += `<g id="${channel}-channel" class="${channel}-layer">`;
         svg += `<title>${channel.toUpperCase()} Channel</title>`;
-
-        const elements = this.extractSVGElements(channelSvg);
-        const enhancedElements = this.enhanceElements(elements, channel);
-        svg += enhancedElements;
-
+        svg += this.optimizePathData(elements);
         svg += '</g>';
       }
     });
 
     svg += `<!-- Layer Info: ${channels.length} channels, Generated: ${new Date().toISOString()} -->`;
-    svg += `<!-- Plotting Stats: ${this.getCombinedStats(channels)} -->`;
     svg += '</svg>';
 
     this.storeSVG('combined', svg);
@@ -136,27 +134,12 @@ class SVGExporter {
   }
 
   /**
-   * Enhances SVG elements by adding channel-specific classes and optimizing path data.
-   * Color is inherited from the parent group's class, not applied inline.
-   * @param {string} elements - A string of SVG elements.
-   * @param {string} channel - The name of the channel.
-   * @returns {string} The enhanced string of SVG elements.
-   */
-  enhanceElements(elements, channel) {
-    let enhanced = elements;
-    // Add channel-specific classes for potential advanced styling.
-    enhanced = enhanced.replace(/<(circle|rect|polygon|line|path)/g, `<$1 class="${channel}-element"`);
-    // Optimize path data by rounding coordinates.
-    enhanced = this.optimizePathData(enhanced);
-    return enhanced;
-  }
-
-  /**
    * Optimizes path data by rounding floating-point numbers to a fixed precision.
    * @param {string} svgContent - The SVG content string.
    * @returns {string} The SVG content with optimized coordinates.
    */
   optimizePathData(svgContent) {
+    // This regex rounds any floating point number with 3 or more decimal places to 2.
     return svgContent.replace(/(\d+\.\d{3,})/g, (match) => parseFloat(match).toFixed(2));
   }
 
@@ -168,272 +151,23 @@ class SVGExporter {
    */
   optimizeSVG(svg, channel = '') {
     let optimized = svg;
+    // Add metadata
     optimized = optimized.replace('<svg', `<svg data-channel="${channel}" data-generated="${new Date().toISOString()}"`);
+    // Round coordinates
     optimized = this.optimizePathData(optimized);
+    // Remove extra whitespace
     optimized = optimized.replace(/\s+/g, ' ').replace(/>\s+</g, '><');
 
     const originalSize = svg.length;
     const optimizedSize = optimized.length;
     const compression = ((originalSize - optimizedSize) / originalSize * 100).toFixed(1);
-    optimized = optimized.replace('</svg>', `<!-- Optimized: ${compression}% smaller --></svg>`);
+
+    // Add optimization comment
+    if (compression > 0) {
+      optimized = optimized.replace('</svg>', `<!-- Optimized: ${compression}% smaller --></svg>`);
+    }
 
     return optimized.trim();
-  }
-
-  /**
-   * Converts SVG data for a channel into HPGL (Hewlett-Packard Graphics Language) commands.
-   * @param {string} channel - The channel to convert.
-   * @param {object} [config={}] - The application configuration for scaling.
-   * @returns {string|null} The generated HPGL code, or null if no data exists.
-   */
-  exportToHPGL(channel, config = {}) {
-    const svg = this.svgData[channel];
-    if (!svg) return null;
-
-    let hpgl = 'IN;SP1;'; // Initialize plotter and select pen 1.
-    hpgl += `LB${channel.toUpperCase()} Channel${String.fromCharCode(3)};`; // Add a label.
-
-    const elements = this.extractAllElements(svg);
-    const sortedElements = this.sortElementsForPlotting(elements);
-
-    // Determine the scaling factor for HPGL units.
-    const imageWidth = parseFloat(svg.match(/width="([^"]+)"/)?.[1]);
-    let hpglScale = 40; // Default: 40 HPGL units per pixel.
-    if (config.paperSize && config.paperSize !== 'image' && imageWidth) {
-      const paper = this.paperSizes[config.paperSize];
-      const unitsToMm = paper.unit === 'in' ? 25.4 : 1;
-      const paperWidthMm = paper.width * unitsToMm;
-      const safeWidthMm = paperWidthMm - (2 * paper.margin * unitsToMm);
-      // HPGL has 40 units per mm.
-      hpglScale = (safeWidthMm / imageWidth) * 40;
-    }
-
-
-    sortedElements.forEach(element => {
-      hpgl += this.convertElementToHPGL(element, hpglScale);
-    });
-
-    hpgl += 'PU;SP0;'; // Pen Up, and park the pen.
-    return hpgl;
-  }
-
-  /**
-   * Extracts all shape elements from an SVG string into a structured array.
-   * @param {string} svg - The SVG content string.
-   * @returns {object[]} An array of element objects with their types and attributes.
-   */
-  extractAllElements(svg) {
-    const elements = [];
-    const extract = (regex, type, parser) => {
-      (svg.match(regex) || []).forEach(matchStr => {
-        const el = parser(matchStr);
-        if(el) elements.push({ type, ...el });
-      });
-    };
-
-    extract(/<circle[^>]+>/g, 'circle', s => ({ cx: parseFloat(s.match(/cx="([^"]+)"/)?.[1]), cy: parseFloat(s.match(/cy="([^"]+)"/)?.[1]), r: parseFloat(s.match(/r="([^"]+)"/)?.[1]) }));
-    extract(/<line[^>]+>/g, 'line', s => ({ x1: parseFloat(s.match(/x1="([^"]+)"/)?.[1]), y1: parseFloat(s.match(/y1="([^"]+)"/)?.[1]), x2: parseFloat(s.match(/x2="([^"]+)"/)?.[1]), y2: parseFloat(s.match(/y2="([^"]+)"/)?.[1]) }));
-    extract(/<rect[^>]+>/g, 'rect', s => ({ x: parseFloat(s.match(/x="([^"]+)"/)?.[1]), y: parseFloat(s.match(/y="([^"]+)"/)?.[1]), width: parseFloat(s.match(/width="([^"]+)"/)?.[1]), height: parseFloat(s.match(/height="([^"]+)"/)?.[1]) }));
-    extract(/<polygon[^>]+>/g, 'polygon', s => {
-      const points = s.match(/points="([^"]+)"/)?.[1] || '';
-      const coords = points.split(' ').map(p => {
-        const [x, y] = p.split(',');
-        return { x: parseFloat(x), y: parseFloat(y) };
-      }).filter(c => !isNaN(c.x));
-      return coords.length > 0 ? { points: coords } : null;
-    });
-    extract(/<path[^>]+>/g, 'path', s => ({ d: s.match(/d="([^"]+)"/)?.[1] || '' }));
-
-    return elements;
-  }
-
-  /**
-   * Sorts SVG elements to optimize plotter head travel distance using a Nearest Neighbor heuristic.
-   * @param {object[]} elements - An array of SVG element objects.
-   * @returns {object[]} The sorted array of elements.
-   */
-  sortElementsForPlotting(elements) {
-    if (elements.length < 2) return elements;
-
-    const getDistanceSq = (p1, p2) => (p1.x - p2.x)**2 + (p1.y - p2.y)**2;
-
-    const getEndpoints = (el) => {
-      if (el.type === 'circle') return { start: {x: el.cx, y: el.cy}, end: {x: el.cx, y: el.cy}};
-      if (el.type === 'line') return { start: {x: el.x1, y: el.y1}, end: {x: el.x2, y: el.y2}};
-      if (el.type === 'rect') return { start: {x: el.x, y: el.y}, end: {x: el.x, y: el.y}}; // Simplified
-      if (el.type === 'polygon' && el.points.length > 0) return { start: el.points[0], end: el.points[el.points.length - 1]};
-      return { start: {x: 0, y: 0}, end: {x: 0, y: 0}}; // Fallback
-    };
-
-    let remaining = [...elements];
-    let sorted = [];
-    let currentLocation = { x: 0, y: 0 };
-
-    while(remaining.length > 0) {
-      let nearestIndex = -1;
-      let minDistanceSq = Infinity;
-      let reverse = false;
-
-      for(let i = 0; i < remaining.length; i++) {
-        const el = remaining[i];
-        const { start, end } = getEndpoints(el);
-
-        const distToStartSq = getDistanceSq(currentLocation, start);
-        if(distToStartSq < minDistanceSq) {
-          minDistanceSq = distToStartSq;
-          nearestIndex = i;
-          reverse = false;
-        }
-
-        // For reversible paths (lines, polygons), check if starting from the end is better
-        if (el.type === 'line' || el.type === 'polygon') {
-          const distToEndSq = getDistanceSq(currentLocation, end);
-          if(distToEndSq < minDistanceSq) {
-            minDistanceSq = distToEndSq;
-            nearestIndex = i;
-            reverse = true;
-          }
-        }
-      }
-
-      const [nearestEl] = remaining.splice(nearestIndex, 1);
-
-      if (reverse) {
-        if (nearestEl.type === 'line') {
-          [nearestEl.x1, nearestEl.x2] = [nearestEl.x2, nearestEl.x1];
-          [nearestEl.y1, nearestEl.y2] = [nearestEl.y2, nearestEl.y1];
-        } else if (nearestEl.type === 'polygon') {
-          nearestEl.points.reverse();
-        }
-      }
-
-      sorted.push(nearestEl);
-      currentLocation = getEndpoints(nearestEl).end;
-    }
-
-    return sorted;
-  }
-
-  /**
-   * Converts a single structured element object into an HPGL command string.
-   * @param {object} element - The element object.
-   * @param {number} scale - The scaling factor to convert pixels to HPGL units.
-   * @returns {string} The corresponding HPGL command string.
-   */
-  convertElementToHPGL(element, scale) {
-    let hpgl = '';
-
-    switch (element.type) {
-      case 'circle':
-        hpgl += `PU${Math.round(element.cx * scale)},${Math.round(element.cy * scale)};CI${Math.round(element.r * scale)};`;
-        break;
-      case 'line':
-        hpgl += `PU${Math.round(element.x1 * scale)},${Math.round(element.y1 * scale)};PD${Math.round(element.x2 * scale)},${Math.round(element.y2 * scale)};`;
-        break;
-      case 'rect':
-        const r = {x: Math.round(element.x * scale), y: Math.round(element.y * scale), w: Math.round(element.width * scale), h: Math.round(element.height * scale)};
-        hpgl += `PU${r.x},${r.y};PD${r.x+r.w},${r.y};PD${r.x+r.w},${r.y+r.h};PD${r.x},${r.y+r.h};PD${r.x},${r.y};`;
-        break;
-      case 'polygon':
-        if (element.points && element.points.length > 0) {
-          const first = element.points[0];
-          hpgl += `PU${Math.round(first.x * scale)},${Math.round(first.y * scale)};PD`;
-          element.points.slice(1).forEach(p => { hpgl += `${Math.round(p.x * scale)},${Math.round(p.y * scale)};`; });
-          hpgl += `${Math.round(first.x * scale)},${Math.round(first.y * scale)};`; // Close polygon
-        }
-        break;
-      case 'path':
-        // NOTE: Full path-to-HPGL conversion is complex and not implemented here.
-        hpgl += `/* Path command not fully supported: ${element.d.substring(0, 40)}... */`;
-        break;
-    }
-    return hpgl;
-  }
-
-  /**
-   * Triggers the download of an HPGL file for a specified channel.
-   * @param {string} channel - The channel name to download.
-   * @param {object} [config={}] - The application configuration.
-   */
-  downloadHPGL(channel, config = {}) {
-    const hpgl = this.exportToHPGL(channel, config);
-    if (!hpgl) {
-      console.error(`No HPGL data generated for channel: ${channel}`);
-      return;
-    }
-
-    const stats = this.getPlottingStats(channel);
-    let header = `; Generated by Advanced Halftone Plotter Tool\n`;
-    header += `; Channel: ${channel.toUpperCase()}\n`;
-    header += `; Date: ${new Date().toISOString()}\n`;
-    if (stats) {
-      header += `; Elements: ${stats.totalElements}, Est. Time: ${stats.estimatedPlotTime}\n`;
-    }
-    header += `; Paper Size: ${config.paperSize || 'image'}\n\n`;
-
-    const blob = new Blob([header + hpgl], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `halftone-${channel}-${new Date().getTime()}.hpgl`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  /**
-   * Calculates statistics about the elements in an SVG for plotting estimates.
-   * @param {string} channel - The channel to analyze.
-   * @returns {object|null} An object with element counts and estimated plot time.
-   */
-  getPlottingStats(channel) {
-    const svg = this.svgData[channel];
-    if (!svg) return null;
-
-    const elements = this.extractAllElements(svg);
-    const counts = { circles: 0, lines: 0, polygons: 0, paths: 0, rects: 0 };
-    elements.forEach(e => { (counts[e.type+'s']++) });
-
-    return {
-      ...counts,
-      totalElements: elements.length,
-      estimatedPlotTime: this.estimatePlotTime(counts.circles, counts.lines, counts.polygons + counts.paths + counts.rects)
-    };
-  }
-
-  /**
-   * Estimates the time required to plot a set of shapes.
-   * @param {number} circles - Number of circles.
-   * @param {number} lines - Number of lines.
-   * @param {number} complexShapes - Number of polygons, paths, and rects.
-   * @returns {string} The estimated time in MM:SS format.
-   */
-  estimatePlotTime(circles, lines, complexShapes) {
-    const totalSeconds = (circles * 0.8) + (lines * 0.2) + (complexShapes * 1.2) + 5; // Base times + setup
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = Math.round(totalSeconds % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  }
-
-  /**
-   * Gets a summary string of plotting stats for all channels combined.
-   * @param {string[]} channels - The channels to include in the stats.
-   * @returns {string} A summary string (e.g., "12345 elements, 5:42 estimated").
-   */
-  getCombinedStats(channels) {
-    let totalElements = 0, totalTime = 0;
-    channels.forEach(channel => {
-      const stats = this.getPlottingStats(channel);
-      if (stats) {
-        totalElements += stats.totalElements;
-        const [m, s] = stats.estimatedPlotTime.split(':').map(Number);
-        totalTime += m * 60 + s;
-      }
-    });
-    const totalMinutes = Math.floor(totalTime / 60);
-    const remSeconds = Math.round(totalTime % 60);
-    return `${totalElements} elements, ${totalMinutes}:${remSeconds.toString().padStart(2, '0')} estimated`;
   }
 
   /**
@@ -485,7 +219,7 @@ class SVGExporter {
     const innerSVG = this.extractSVGElements(svgContent);
 
     let wrapperSVG = `<svg width="${paperWidth}${paper.unit}" height="${paperHeight}${paper.unit}" viewBox="0 0 ${paperWidth} ${paperHeight}" xmlns="http://www.w3.org/2000/svg" color-interpolation-filters="sRGB">`;
-    wrapperSVG += `<title>Halftone for ${paper.unit.toUpperCase()} Paper</title>`;
+    wrapperSVG += `<title>Halftone for ${config.paperSize.toUpperCase()} Paper</title>`;
     wrapperSVG += `<desc>Content scaled to fit within a ${margin}${paper.unit} margin.</desc>`;
     wrapperSVG += `<g transform="translate(${xOffset.toFixed(3)} ${yOffset.toFixed(3)}) scale(${scale.toFixed(5)})">`;
     wrapperSVG += innerSVG;
@@ -495,4 +229,5 @@ class SVGExporter {
   }
 }
 
+// Attach to the global scope to be accessible by other scripts
 self.SVGExporter = SVGExporter;
