@@ -466,4 +466,4 @@ class HalftonePatterns {
   }
 }
 
-window.HalftonePatterns = HalftonePatterns;
+self.HalftonePatterns = HalftonePatterns;

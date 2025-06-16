@@ -110,6 +110,16 @@
                             <button id="resetColorsBtn" class="harmonize-btn" title="Reset to Default CMYK Colors">🔄</button>
                         </div>
                     </div>
+                    <div class="control-group">
+                        <label for="paperSize">Paper Size (for Download)</label>
+                        <select id="paperSize">
+                            <option value="image">Image Size (Default)</option>
+                            <option value="a4">A4 (210 x 297mm)</option>
+                            <option value="a3">A3 (297 x 420mm)</option>
+                            <option value="letter">Letter (8.5 x 11in)</option>
+                            <option value="tabloid">Tabloid (11 x 17in)</option>
+                        </select>
+                    </div>
                     <div class="color-header">
                         <h4 id="color-card-title">CMYK Colors</h4>
                     </div>
@@ -232,16 +242,16 @@
                         <canvas id="combinedCanvas"></canvas>
                     </div>
                     <div class="download-section">
-                        <button class="download-btn primary" onclick="downloadSVG('combined')">
+                        <button class="download-btn primary" onclick="halftoneApp.downloadSVG('combined')">
                             <span class="btn-icon">💾</span>
                             Download Combined SVG
                         </button>
                         <div class="download-secondary">
-                            <button class="download-btn secondary" onclick="downloadAllChannels()">
+                            <button class="download-btn secondary" onclick="halftoneApp.downloadAllChannels()">
                                 <span class="btn-icon">📦</span>
                                 All Channels
                             </button>
-                            <button class="download-btn secondary" onclick="downloadHPGL('combined')">
+                            <button class="download-btn secondary" onclick="halftoneApp.downloadHPGL('combined')">
                                 <span class="btn-icon">🖨️</span>
                                 HPGL
                             </button>

@@ -104,5 +104,5 @@ class ColorManager {
   }
 }
 
-// Attach to the window object to be accessible by other scripts
-window.ColorManager = ColorManager;
+// Attach to the global scope to be accessible by other scripts
+self.ColorManager = ColorManager;

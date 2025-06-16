@@ -19,6 +19,17 @@ class SVGExporter {
      * @type {Object.<string, string>}
      */
     this.svgData = {};
+    /**
+     * A store for paper size definitions.
+     * @type {Object.<string, object>}
+     */
+    this.paperSizes = {
+      'image': { width: null, height: null, unit: 'px', margin: 0 },
+      'a4': { width: 210, height: 297, unit: 'mm', margin: 10 },
+      'a3': { width: 297, height: 420, unit: 'mm', margin: 10 },
+      'letter': { width: 8.5, height: 11, unit: 'in', margin: 0.25 },
+      'tabloid': { width: 11, height: 17, unit: 'in', margin: 0.5 },
+    };
   }
 
   /**
@@ -33,15 +44,21 @@ class SVGExporter {
   /**
    * Triggers the download of an SVG file for a specified channel.
    * @param {string} channel - The channel name to download.
+   * @param {object} [config={}] - The application configuration, including paper size.
    */
-  downloadSVG(channel) {
-    const svg = this.svgData[channel];
-    if (!svg) {
+  downloadSVG(channel, config = {}) {
+    let svgContent = this.svgData[channel];
+    if (!svgContent) {
       console.error(`No SVG data found for channel: ${channel}`);
       return;
     }
 
-    const optimizedSVG = this.optimizeSVG(svg, channel);
+    // If a paper size is selected, re-format the SVG.
+    if (config.paperSize && config.paperSize !== 'image' && channel === 'combined') {
+      svgContent = this.formatSVGForPaper(svgContent, config);
+    }
+
+    const optimizedSVG = this.optimizeSVG(svgContent, channel);
     const blob = new Blob([optimizedSVG], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -110,15 +127,10 @@ class SVGExporter {
    * @returns {string} The string of SVG elements inside the main group.
    */
   extractSVGElements(svgString) {
-    const match = svgString.match(/<g[^>]*>(.*?)<\/g>/s);
+    const match = svgString.match(/<svg[^>]*>(.*?)<\/svg>/s);
     if (match && match[1]) {
+      // Return everything inside the <svg> tag.
       return match[1];
-    }
-    // Fallback for SVGs without a group tag
-    const fallbackMatch = svgString.match(/<svg[^>]*>(.*?)<\/svg>/s);
-    if (fallbackMatch && fallbackMatch[1]) {
-      // Remove background rect and return rest
-      return fallbackMatch[1].replace(/<rect[^>]*fill="white"[^>]*\/?>/, '');
     }
     return '';
   }
@@ -171,9 +183,10 @@ class SVGExporter {
   /**
    * Converts SVG data for a channel into HPGL (Hewlett-Packard Graphics Language) commands.
    * @param {string} channel - The channel to convert.
+   * @param {object} [config={}] - The application configuration for scaling.
    * @returns {string|null} The generated HPGL code, or null if no data exists.
    */
-  exportToHPGL(channel) {
+  exportToHPGL(channel, config = {}) {
     const svg = this.svgData[channel];
     if (!svg) return null;
 
@@ -183,8 +196,21 @@ class SVGExporter {
     const elements = this.extractAllElements(svg);
     const sortedElements = this.sortElementsForPlotting(elements);
 
+    // Determine the scaling factor for HPGL units.
+    const imageWidth = parseFloat(svg.match(/width="([^"]+)"/)?.[1]);
+    let hpglScale = 40; // Default: 40 HPGL units per pixel.
+    if (config.paperSize && config.paperSize !== 'image' && imageWidth) {
+      const paper = this.paperSizes[config.paperSize];
+      const unitsToMm = paper.unit === 'in' ? 25.4 : 1;
+      const paperWidthMm = paper.width * unitsToMm;
+      const safeWidthMm = paperWidthMm - (2 * paper.margin * unitsToMm);
+      // HPGL has 40 units per mm.
+      hpglScale = (safeWidthMm / imageWidth) * 40;
+    }
+
+
     sortedElements.forEach(element => {
-      hpgl += this.convertElementToHPGL(element);
+      hpgl += this.convertElementToHPGL(element, hpglScale);
     });
 
     hpgl += 'PU;SP0;'; // Pen Up, and park the pen.
@@ -222,29 +248,80 @@ class SVGExporter {
   }
 
   /**
-   * Sorts SVG elements to optimize plotter head travel distance.
+   * Sorts SVG elements to optimize plotter head travel distance using a Nearest Neighbor heuristic.
    * @param {object[]} elements - An array of SVG element objects.
    * @returns {object[]} The sorted array of elements.
    */
   sortElementsForPlotting(elements) {
-    // A simple top-to-bottom, left-to-right sort.
-    return elements.sort((a, b) => {
-      const aY = a.cy || a.y1 || a.y || (a.points ? a.points[0].y : 0);
-      const bY = b.cy || b.y1 || b.y || (b.points ? b.points[0].y : 0);
-      const aX = a.cx || a.x1 || a.x || (a.points ? a.points[0].x : 0);
-      const bX = b.cx || b.x1 || b.x || (b.points ? b.points[0].x : 0);
-      return aY !== bY ? aY - bY : aX - bX;
-    });
+    if (elements.length < 2) return elements;
+
+    const getDistanceSq = (p1, p2) => (p1.x - p2.x)**2 + (p1.y - p2.y)**2;
+
+    const getEndpoints = (el) => {
+      if (el.type === 'circle') return { start: {x: el.cx, y: el.cy}, end: {x: el.cx, y: el.cy}};
+      if (el.type === 'line') return { start: {x: el.x1, y: el.y1}, end: {x: el.x2, y: el.y2}};
+      if (el.type === 'rect') return { start: {x: el.x, y: el.y}, end: {x: el.x, y: el.y}}; // Simplified
+      if (el.type === 'polygon' && el.points.length > 0) return { start: el.points[0], end: el.points[el.points.length - 1]};
+      return { start: {x: 0, y: 0}, end: {x: 0, y: 0}}; // Fallback
+    };
+
+    let remaining = [...elements];
+    let sorted = [];
+    let currentLocation = { x: 0, y: 0 };
+
+    while(remaining.length > 0) {
+      let nearestIndex = -1;
+      let minDistanceSq = Infinity;
+      let reverse = false;
+
+      for(let i = 0; i < remaining.length; i++) {
+        const el = remaining[i];
+        const { start, end } = getEndpoints(el);
+
+        const distToStartSq = getDistanceSq(currentLocation, start);
+        if(distToStartSq < minDistanceSq) {
+          minDistanceSq = distToStartSq;
+          nearestIndex = i;
+          reverse = false;
+        }
+
+        // For reversible paths (lines, polygons), check if starting from the end is better
+        if (el.type === 'line' || el.type === 'polygon') {
+          const distToEndSq = getDistanceSq(currentLocation, end);
+          if(distToEndSq < minDistanceSq) {
+            minDistanceSq = distToEndSq;
+            nearestIndex = i;
+            reverse = true;
+          }
+        }
+      }
+
+      const [nearestEl] = remaining.splice(nearestIndex, 1);
+
+      if (reverse) {
+        if (nearestEl.type === 'line') {
+          [nearestEl.x1, nearestEl.x2] = [nearestEl.x2, nearestEl.x1];
+          [nearestEl.y1, nearestEl.y2] = [nearestEl.y2, nearestEl.y1];
+        } else if (nearestEl.type === 'polygon') {
+          nearestEl.points.reverse();
+        }
+      }
+
+      sorted.push(nearestEl);
+      currentLocation = getEndpoints(nearestEl).end;
+    }
+
+    return sorted;
   }
 
   /**
    * Converts a single structured element object into an HPGL command string.
    * @param {object} element - The element object.
+   * @param {number} scale - The scaling factor to convert pixels to HPGL units.
    * @returns {string} The corresponding HPGL command string.
    */
-  convertElementToHPGL(element) {
+  convertElementToHPGL(element, scale) {
     let hpgl = '';
-    const scale = 40; // HPGL plotter units per pixel.
 
     switch (element.type) {
       case 'circle':
@@ -276,9 +353,10 @@ class SVGExporter {
   /**
    * Triggers the download of an HPGL file for a specified channel.
    * @param {string} channel - The channel name to download.
+   * @param {object} [config={}] - The application configuration.
    */
-  downloadHPGL(channel) {
-    const hpgl = this.exportToHPGL(channel);
+  downloadHPGL(channel, config = {}) {
+    const hpgl = this.exportToHPGL(channel, config);
     if (!hpgl) {
       console.error(`No HPGL data generated for channel: ${channel}`);
       return;
@@ -291,7 +369,7 @@ class SVGExporter {
     if (stats) {
       header += `; Elements: ${stats.totalElements}, Est. Time: ${stats.estimatedPlotTime}\n`;
     }
-    header += `; Scale: 40 HPGL units per pixel\n\n`;
+    header += `; Paper Size: ${config.paperSize || 'image'}\n\n`;
 
     const blob = new Blob([header + hpgl], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -360,20 +438,61 @@ class SVGExporter {
 
   /**
    * Downloads all individual channel SVGs and the combined SVG in sequence.
+   * @param {object} [config={}] - The application configuration.
    */
-  async downloadAllChannels() {
+  async downloadAllChannels(config = {}) {
     const channels = Object.keys(this.svgData).filter(k => k !== 'combined');
     let delay = 0;
     for (const channel of channels) {
       if (this.svgData[channel]) {
-        setTimeout(() => this.downloadSVG(channel), delay);
+        setTimeout(() => this.downloadSVG(channel, config), delay);
         delay += 500; // Stagger downloads to prevent browser blocking.
       }
     }
     if (this.svgData.combined) {
-      setTimeout(() => this.downloadSVG('combined'), delay);
+      setTimeout(() => this.downloadSVG('combined', config), delay);
     }
+  }
+
+  /**
+   * Wraps an existing SVG inside a new SVG formatted for a specific paper size.
+   * @param {string} svgContent - The original SVG content string.
+   * @param {object} config - The application configuration.
+   * @returns {string} The new SVG string formatted for the paper size.
+   */
+  formatSVGForPaper(svgContent, config) {
+    const paper = this.paperSizes[config.paperSize];
+    if (!paper) return svgContent;
+
+    const imageWidth = parseFloat(svgContent.match(/width="([^"]+)"/)?.[1]);
+    const imageHeight = parseFloat(svgContent.match(/height="([^"]+)"/)?.[1]);
+    if (!imageWidth || !imageHeight) return svgContent;
+
+    const paperWidth = paper.width;
+    const paperHeight = paper.height;
+    const margin = paper.margin;
+
+    const safeWidth = paperWidth - 2 * margin;
+    const safeHeight = paperHeight - 2 * margin;
+
+    const scale = Math.min(safeWidth / imageWidth, safeHeight / imageHeight);
+    const scaledWidth = imageWidth * scale;
+    const scaledHeight = imageHeight * scale;
+
+    const xOffset = margin + (safeWidth - scaledWidth) / 2;
+    const yOffset = margin + (safeHeight - scaledHeight) / 2;
+
+    const innerSVG = this.extractSVGElements(svgContent);
+
+    let wrapperSVG = `<svg width="${paperWidth}${paper.unit}" height="${paperHeight}${paper.unit}" viewBox="0 0 ${paperWidth} ${paperHeight}" xmlns="http://www.w3.org/2000/svg" color-interpolation-filters="sRGB">`;
+    wrapperSVG += `<title>Halftone for ${paper.unit.toUpperCase()} Paper</title>`;
+    wrapperSVG += `<desc>Content scaled to fit within a ${margin}${paper.unit} margin.</desc>`;
+    wrapperSVG += `<g transform="translate(${xOffset.toFixed(3)} ${yOffset.toFixed(3)}) scale(${scale.toFixed(5)})">`;
+    wrapperSVG += innerSVG;
+    wrapperSVG += `</g></svg>`;
+
+    return wrapperSVG;
   }
 }
 
-window.SVGExporter = SVGExporter;
+self.SVGExporter = SVGExporter;

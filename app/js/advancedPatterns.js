@@ -378,5 +378,5 @@ class AdvancedPatterns {
   }
 }
 
-// Attach to the window object to be accessible by other scripts
-window.AdvancedPatterns = AdvancedPatterns;
+// Attach to the global scope to be accessible by other scripts
+self.AdvancedPatterns = AdvancedPatterns;

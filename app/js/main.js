@@ -21,12 +21,6 @@ class HalftoneApp {
     this.uploadedImage = null;
 
     /**
-     * Instance of the HalftonePatterns class for generating patterns.
-     * @type {HalftonePatterns}
-     */
-    this.patterns = new HalftonePatterns();
-
-    /**
      * Instance of the SVGExporter class for handling file exports.
      * @type {SVGExporter}
      */
@@ -37,6 +31,25 @@ class HalftoneApp {
      * @type {ColorManager}
      */
     this.colorManager = ColorManager;
+
+    /**
+     * The Web Worker for off-thread processing.
+     * @type {Worker}
+     */
+    this.worker = new Worker('js/worker.js');
+
+    /**
+     * A store for results coming back from the worker.
+     * @type {Object}
+     */
+    this.workerResults = {};
+
+    /**
+     * The number of results expected from the worker for the current job.
+     * @type {number}
+     */
+    this.expectedWorkerResults = 0;
+
 
     this.initializeEventListeners();
     this.updateUIForCurrentSettings();
@@ -59,6 +72,14 @@ class HalftoneApp {
 
     // --- Main Action Listener ---
     processBtn.addEventListener('click', this.processImage.bind(this));
+
+    // --- Worker Message Listener ---
+    this.worker.onmessage = this.handleWorkerMessage.bind(this);
+    this.worker.onerror = (e) => {
+      console.error('Error from worker:', e);
+      alert(`An error occurred in the processing worker: ${e.message}`);
+      this.setProcessingState(false);
+    };
 
     // --- Control Panel Listeners ---
     this.setupControlListeners();
@@ -97,7 +118,7 @@ class HalftoneApp {
     });
 
     // Listeners for controls that affect UI visibility
-    const uiAffectingControls = ['patternType', 'colorMode', 'angleOffset'];
+    const uiAffectingControls = ['patternType', 'colorMode', 'angleOffset', 'paperSize'];
     uiAffectingControls.forEach(id => {
       document.getElementById(id).addEventListener('change', this.updateUIForCurrentSettings.bind(this));
     });
@@ -118,13 +139,14 @@ class HalftoneApp {
     const colorMode = document.getElementById('colorMode').value;
     const renderStyle = document.querySelector('input[name="renderStyle"]:checked').value;
     const useStandardAngles = document.getElementById('angleOffset').checked;
+    const paperSize = document.getElementById('paperSize').value;
 
     // 1. Update pattern-specific controls
     const lineAngleGroup = document.getElementById('lineAngle').closest('.control-group');
     const randomnessGroup = document.getElementById('randomness').closest('.control-group');
     if (lineAngleGroup) lineAngleGroup.style.display = ['line', 'crosshatch', 'wave'].includes(patternType) ? 'block' : 'none';
     if (randomnessGroup) randomnessGroup.style.display = ['stochastic', 'stipple', 'voronoi'].includes(patternType) ? 'block' : 'none';
-    this.showPatternTip(patternType);
+    this.showPatternTip(patternType, paperSize);
 
     // 2. Update render style controls
     document.getElementById('strokeWidthGroup').style.display = renderStyle === 'stroke' ? 'block' : 'none';
@@ -225,8 +247,9 @@ class HalftoneApp {
   /**
    * Displays a helpful tip related to the currently selected pattern.
    * @param {string} patternType - The value of the selected pattern.
+   * @param {string} paperSize - The value of the selected paper size.
    */
-  showPatternTip(patternType) {
+  showPatternTip(patternType, paperSize) {
     const existingTip = document.querySelector('.pattern-tip');
     if (existingTip) {
       existingTip.remove();
@@ -238,13 +261,19 @@ class HalftoneApp {
       'spiral': 'Creates spiral patterns. Works best with medium spacing.',
       'hexagonal': 'Efficient hexagonal packing. Great for technical illustrations.',
       'wave': 'Wave distortion pattern. Use line angle to control wave direction.',
-      'flowfield': 'Dots follow image gradients, creating painterly, flowing effects.'
+      'flowfield': 'Dots follow image gradients, creating painterly, flowing effects.',
+      'paper': 'Paper size setting only affects downloaded files (SVG/HPGL), not the on-screen preview.'
     };
 
-    if (tips[patternType]) {
+    let tipText = tips[patternType];
+    if (!tipText && paperSize && paperSize !== 'image') {
+      tipText = tips['paper'];
+    }
+
+    if (tipText) {
       const tip = document.createElement('div');
       tip.className = 'pattern-tip';
-      tip.textContent = `💡 ${tips[patternType]}`;
+      tip.textContent = `💡 ${tipText}`;
 
       const processSection = document.querySelector('.process-section');
       processSection.parentNode.insertBefore(tip, processSection);
@@ -349,7 +378,8 @@ class HalftoneApp {
     const useAngleOffset = document.getElementById('angleOffset').checked;
     let angles;
     if (useAngleOffset) {
-      const standardAngles = this.patterns.getStandardAngles();
+      // We no longer have a patterns instance here, but we can hardcode the standard angles.
+      const standardAngles = { cyan: 15, magenta: 75, yellow: 0, black: 45 };
       const modeAngles = {
         monochrome: { key: 45 },
         duotone: { tone1: 75, tone2: 15 },
@@ -378,12 +408,14 @@ class HalftoneApp {
       strokeWidth: parseFloat(document.getElementById('strokeWidth').value),
       colors: colors,
       channelNames: channelNames,
-      angles: angles
+      angles: angles,
+      paperSize: document.getElementById('paperSize').value,
     };
   }
 
   /**
    * The main orchestration method that is triggered when the "Process Image" button is clicked.
+   * This now delegates the heavy work to a Web Worker.
    */
   processImage() {
     if (!this.uploadedImage) {
@@ -396,49 +428,62 @@ class HalftoneApp {
 
     // Use a short timeout to allow the UI to update to the "processing" state.
     setTimeout(() => {
-      try {
-        document.getElementById('previewSection').classList.remove('hidden');
-
-        this.displayOriginalImage();
-        const imageData = this.getImageData();
-        if (!imageData) {
-          this.setProcessingState(false);
-          return;
-        };
-
-        // Dynamic color separation
-        let channelData;
-        switch (config.colorMode) {
-          case 'monochrome':
-            channelData = { key: rgbToGrayscale(imageData.data, config.contrast) };
-            break;
-          case 'duotone':
-            const duo = rgbToMultiTone(imageData.data, 2, config.contrast);
-            channelData = { tone1: duo.tone1, tone2: duo.tone2 };
-            break;
-          case 'tritone':
-            const tri = rgbToMultiTone(imageData.data, 3, config.contrast);
-            channelData = { shadows: tri.tone1, midtones: tri.tone2, highlights: tri.tone3 };
-            break;
-          case 'cmyk':
-          default:
-            const cmyk = rgbToCmyk(imageData.data, imageData.width, imageData.height, config.contrast);
-            channelData = { cyan: cmyk.c, magenta: cmyk.m, yellow: cmyk.y, black: cmyk.k };
-            break;
-        }
-
-        this.generateChannelHalftones(channelData, config);
-        this.generateCombinedPreview(config.channelNames, config.colors);
-        this.logAndDisplayProcessingStats(config.channelNames);
-
-      } catch (error) {
-        console.error('An error occurred during image processing:', error);
-        alert('An error occurred during processing. Please check the console for details or try different settings.');
-      } finally {
+      document.getElementById('previewSection').classList.remove('hidden');
+      this.displayOriginalImage();
+      const imageData = this.getImageData();
+      if (!imageData) {
         this.setProcessingState(false);
+        return;
       }
+
+      // Reset worker state for new job
+      this.workerResults = {};
+      this.expectedWorkerResults = config.channelNames.length;
+
+      // Post the image data and config to the worker.
+      // The image data is copied, which is fine for this operation.
+      this.worker.postMessage({ config, imageData });
+
     }, 100);
   }
+
+  /**
+   * Handles messages received from the processing worker.
+   * @param {MessageEvent} e - The event from the worker.
+   * @param {object} e.data - The data payload.
+   * @param {string} e.data.channel - The name of the processed channel.
+   * @param {string} e.data.svg - The generated SVG string for the channel.
+   * @param {ImageBitmap} e.data.imageBitmap - The rendered canvas bitmap for the channel.
+   */
+  handleWorkerMessage(e) {
+    const { channel, svg, imageBitmap } = e.data;
+
+    // Store results
+    this.exporter.storeSVG(channel, svg);
+    this.workerResults[channel] = { imageBitmap };
+
+    // Ensure a hidden canvas exists for this channel and draw the bitmap to it.
+    // This is necessary for the combined preview.
+    let canvas = document.getElementById(`${channel}Canvas`);
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.id = `${channel}Canvas`;
+      canvas.style.display = 'none';
+      document.body.appendChild(canvas);
+    }
+    canvas.width = imageBitmap.width;
+    canvas.height = imageBitmap.height;
+    canvas.getContext('2d').drawImage(imageBitmap, 0, 0);
+
+    // Check if all channels have been processed
+    if (Object.keys(this.workerResults).length === this.expectedWorkerResults) {
+      const config = this.getProcessingConfig(); // Get latest config for preview
+      this.generateCombinedPreview(config.channelNames, config.colors);
+      this.logAndDisplayProcessingStats(config.channelNames);
+      this.setProcessingState(false);
+    }
+  }
+
 
   /**
    * Updates the UI to indicate whether the application is currently processing.
@@ -485,42 +530,6 @@ class HalftoneApp {
       alert("Error: Cannot process this image due to browser security restrictions (CORS policy). Please try a different image or host it on the same domain.");
       return null;
     }
-  }
-
-  /**
-   * Generates the halftone pattern for each color channel individually.
-   * @param {Object.<string, number[]>} channelData - The separated channel data.
-   * @param {object} config - The main processing configuration.
-   */
-  generateChannelHalftones(channelData, config) {
-    const channelNames = Object.keys(channelData);
-
-    channelNames.forEach(channel => {
-      let canvas = document.getElementById(`${channel}Canvas`);
-      if (!canvas) {
-        canvas = document.createElement('canvas');
-        canvas.id = `${channel}Canvas`;
-        canvas.style.display = 'none';
-        document.body.appendChild(canvas);
-      }
-
-      const channelConfig = {
-        ...config,
-        angle: config.angles[channel] || 0,
-        color: config.colors[channel]
-      };
-
-      const svg = this.patterns.generatePattern(
-        config.patternType,
-        channel,
-        channelData[channel],
-        this.uploadedImage.width,
-        this.uploadedImage.height,
-        channelConfig,
-        canvas // Pass the canvas to the generator
-      );
-      this.exporter.storeSVG(channel, svg);
-    });
   }
 
   /**
@@ -595,21 +604,33 @@ class HalftoneApp {
     const previewHeader = document.querySelector('.preview-header');
     previewHeader.parentNode.insertBefore(statsDiv, previewHeader.nextSibling);
   }
-}
 
-// --- Global Functions for HTML `onclick` ---
-function downloadSVG(channel) {
-  window.halftoneApp?.exporter.downloadSVG(channel);
-}
+  /**
+   * Public method to trigger SVG download.
+   * @param {string} channel - The channel name to download.
+   */
+  downloadSVG(channel) {
+    const config = this.getProcessingConfig();
+    this.exporter.downloadSVG(channel, config);
+  }
 
-function downloadHPGL(channel) {
-  window.halftoneApp?.exporter.downloadHPGL(channel);
-}
+  /**
+   * Public method to trigger HPGL download.
+   * @param {string} channel - The channel name to download.
+   */
+  downloadHPGL(channel) {
+    const config = this.getProcessingConfig();
+    this.exporter.downloadHPGL(channel, config);
+  }
 
-function downloadAllChannels() {
-  window.halftoneApp?.exporter.downloadAllChannels();
+  /**
+   * Public method to trigger download of all channels.
+   */
+  downloadAllChannels() {
+    const config = this.getProcessingConfig();
+    this.exporter.downloadAllChannels(config);
+  }
 }
-
 
 // --- App Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
